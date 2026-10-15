@@ -20,7 +20,7 @@ src/
   services/scanner.ts      scan pipeline: rules + reputation → save
   services/keywords.ts     cached admin keyword list
   services/reputation/     VirusTotal v3 + Safe Browsing v4 clients
-  models/                  Mongoose schemas: users, scans (with embedded reports), keywords
+  models/                  Mongoose schemas (users, scans, keywords), enums shared with core
   repositories/            all database access (users, scans, reports, keywords)
   middlewares/             auth (requireAuth / optionalAuth / requireAdmin),
                            rate limits, the single error handler
@@ -62,8 +62,9 @@ Every error uses one envelope, written only by the error handler:
    lookups run **in parallel**. Each lookup has a 6 s timeout; a failure or a
    missing key becomes an "unavailable" result instead of failing the scan.
 3. `@phishlens/core` scores rules + reputation into a verdict.
-4. For signed-in users, the scan is saved with (when medium/high) its report
-   embedded in the same document, so both land in **one atomic write**.
+4. For signed-in users, the scan is saved. A medium or high scan *is* a threat
+   report: `GET /api/reports` reads flagged scans and describes them with
+   core's `scanReport()`, so nothing extra is stored or can drift.
 
 VirusTotal URLs it has never seen are submitted for analysis and reported as
 "not yet known" — that is not treated as clean. The free VirusTotal tier
@@ -74,10 +75,10 @@ allows 4 lookups a minute; `SCAN_RATE_LIMIT_MAX` limits scans per user.
 - **Sessions:** httpOnly cookies; the refresh cookie is scoped to
   `/api/auth/refresh`. The browser calls the API through the web app's
   `/api/*` proxy, so cookies are first-party (`COOKIE_SAMESITE=lax`).
-- **Admin checks** re-read role and status from the database on every admin
-  request, so demoting or suspending an admin takes effect immediately.
-  Suspended users can't sign in or refresh; an access token they already hold
-  keeps working until it expires (`ACCESS_TOKEN_TTL`, 15 minutes by default).
+- **Every signed-in request** re-reads the account from the database, so
+  suspending, demoting or deleting an account takes effect on the very next
+  request — not when its access token expires. Tokens whose user id isn't a
+  MongoDB id are rejected with 401.
 - **Google sign-in** matches returning users on Google's stable `sub`, links a
   verified email to an existing password account only when that account has
   no other Google identity, and refuses unverified emails.
@@ -100,11 +101,11 @@ allows 4 lookups a minute; `SCAN_RATE_LIMIT_MAX` limits scans per user.
 
 ## Tests
 
-Vitest + Supertest drive the real Express app. `test/setup.ts` swaps every
-repository for one in-memory database (`test/fakes/db.ts`) and stubs the
-reputation services, so route tests need no database, network or `.env`.
-The `*.mongo.test.ts` suites run the real repositories and the whole app
-against a real MongoDB (mongodb-memory-server, downloaded on first run).
+Vitest + Supertest drive the real Express app against a real MongoDB:
+`test/globalSetup.ts` starts one in-memory server (mongodb-memory-server,
+downloaded on first run) and `test/setup.ts` gives each test file its own
+database, empties it before every test and stubs the reputation services. No
+fake repositories, network or `.env` needed.
 
 - `auth.routes.test.ts` — app wiring, register/login/me/refresh/logout, suspension, error handling
 - `google.routes.test.ts`, `google.lib.test.ts` — Google sign-in and ID-token verification
