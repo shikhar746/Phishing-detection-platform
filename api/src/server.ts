@@ -1,8 +1,21 @@
-﻿import { env } from './config/env.js'
+import { env } from './config/env.js'
 import app from './app.js'
+import mongoose from 'mongoose'
+import { connectDb, disconnectDb } from './lib/db.js'
 
-app.listen(env.PORT, '0.0.0.0', () => {
+// Connect before accepting traffic, so the first request never races the database.
+await connectDb()
+console.log(`[api] connected to MongoDB database "${mongoose.connection.name}"`)
+
+const server = app.listen(env.PORT, '0.0.0.0', () => {
     console.log(`[api] listening on port ${env.PORT} (${env.NODE_ENV})`)
     console.log(`[api] allowed origins: ${env.CORS_ORIGIN.join(', ')}`)
-    console.log(`[api] google sign-in: ${env.GOOGLE_CLIENT_ID ? `enabled (${env.GOOGLE_CLIENT_ID})` : 'disabled (GOOGLE_CLIENT_ID unset)'}`)
+    console.log(`[api] google sign-in: ${env.GOOGLE_CLIENT_ID ? 'enabled' : 'disabled (GOOGLE_CLIENT_ID unset)'}`)
 })
+
+// Render (and most hosts) send SIGTERM on deploys: finish in-flight requests, then close the pool.
+for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+    process.once(signal, () => {
+        server.close(() => void disconnectDb().finally(() => process.exit(0)))
+    })
+}

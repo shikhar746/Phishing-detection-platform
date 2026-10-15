@@ -94,10 +94,13 @@ export const env = {
     REFRESH_TOKEN_TTL: optionalDuration('REFRESH_TOKEN_TTL', '7d'),
     GOOGLE_CLIENT_ID: optionalString('GOOGLE_CLIENT_ID'),
 
-    // database (Supabase Postgres). The service-role key bypasses row-level
-    // security, so it must only ever live on the server.
-    SUPABASE_URL: required('SUPABASE_URL'),
-    SUPABASE_SERVICE_ROLE_KEY: required('SUPABASE_SERVICE_ROLE_KEY'),
+    // database (MongoDB, e.g. an Atlas connection string)
+    MONGODB_URI: required('MONGODB_URI'),
+    // optional database name; otherwise the one in the URI, else "phishlens"
+    MONGODB_DB: optionalString('MONGODB_DB'),
+    // Optional DNS servers for resolving mongodb+srv:// hosts, e.g. "1.1.1.1,8.8.8.8".
+    // Only needed where Node's resolver can't do SRV lookups (some VPN/WARP setups).
+    DNS_SERVERS: optionalStringArray('DNS_SERVERS', []),
 
     // threat-intel APIs, used by the scan endpoints
     VIRUSTOTAL_API_KEY: optionalString('VIRUSTOTAL_API_KEY'),
