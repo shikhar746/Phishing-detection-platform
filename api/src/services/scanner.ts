@@ -1,20 +1,15 @@
 import { Types } from 'mongoose'
-import { analyzeEmail, analyzeUrl, isFlagged, normalizeUrl, scanReport, type ScanResult } from '@phishlens/core'
+import { analyzeEmail, analyzeUrl, normalizeUrl, type ScanResult } from '@phishlens/core'
 import { scansRepo, type UnsavedScan } from '../repositories/scans.repo.js'
 import { activeKeywords } from './keywords.js'
 import { checkReputation } from './reputation/index.js'
 
 // Runs a scan end to end: rules + reputation, then persistence. Signed-in
-// users' scans are saved (with their report, when flagged); anonymous scans
-// are returned but not stored.
+// users' scans are saved; anonymous scans are returned but not stored.
 
 async function save(scan: UnsavedScan, userId: string | undefined): Promise<ScanResult> {
-  const createdAt = new Date().toISOString()
-  if (!userId) return { ...scan, id: new Types.ObjectId().toString(), createdAt }
-
-  // a report's wording depends only on the result, so it can be built before the row exists
-  const report = isFlagged(scan) ? scanReport({ ...scan, id: 'pending', createdAt }) : null
-  return scansRepo.record(userId, scan, report && { category: report.category, title: report.title, details: report.details })
+  if (!userId) return { ...scan, id: new Types.ObjectId().toString(), createdAt: new Date().toISOString() }
+  return scansRepo.record(userId, scan)
 }
 
 export async function scanUrl(input: string, userId?: string): Promise<ScanResult> {

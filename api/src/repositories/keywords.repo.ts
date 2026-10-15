@@ -7,7 +7,7 @@ import { KeywordModel, type KeywordDoc } from '../models/keyword.model.js'
 const toKeyword = (d: KeywordDoc): SuspiciousKeyword => ({
   id: d._id.toString(),
   term: d.term,
-  category: d.category as SuspiciousKeyword['category'],
+  category: d.category,
   weight: d.weight,
   createdAt: d.createdAt.toISOString(),
 })
@@ -21,14 +21,18 @@ export class DuplicateKeywordError extends Error {
 
 export const keywordsRepo = {
   async list(): Promise<SuspiciousKeyword[]> {
-    const docs = await KeywordModel.find().sort({ createdAt: -1 }).lean<KeywordDoc[]>()
+    const docs = await KeywordModel.find().sort({ createdAt: -1, _id: -1 }).lean<KeywordDoc[]>()
     return docs.map(toKeyword)
+  },
+
+  async count(): Promise<number> {
+    return KeywordModel.countDocuments()
   },
 
   async add(rule: KeywordRule): Promise<SuspiciousKeyword> {
     try {
       const doc = await KeywordModel.create(rule)
-      return toKeyword(doc.toObject() as KeywordDoc)
+      return toKeyword(doc.toObject())
     } catch (err) {
       if ((err as { code?: number }).code === 11000) throw new DuplicateKeywordError()
       throw err

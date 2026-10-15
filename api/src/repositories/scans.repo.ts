@@ -1,49 +1,58 @@
 import { Types } from 'mongoose'
-import type { CheckResult, ReputationResult, RiskLevel, ScanReport, ScanResult, ScanType } from '@phishlens/core'
+import type { RiskLevel, ScanResult } from '@phishlens/core'
 import { ScanModel, type ScanDoc } from '../models/scan.model.js'
+import { UserModel } from '../models/user.model.js'
 
 // Reads and writes of scans, mapped to the shared ScanResult shape.
 
 export type UnsavedScan = Omit<ScanResult, 'id' | 'createdAt' | 'userId'>
-export type ReportFields = Pick<ScanReport, 'category' | 'title' | 'details'>
 export type LevelCounts = Record<RiskLevel, number> & { total: number }
 
 const HISTORY_LIMIT = 500
+const FLAGGED: RiskLevel[] = ['medium', 'high']
 
+// Field by field on purpose: spreading the document would leak storage
+// details (e.g. Mongoose's __v) into API responses.
 export const toScan = (d: ScanDoc): ScanResult => ({
   id: d._id.toString(),
-  type: d.type as ScanType,
+  type: d.type,
   content: d.content,
-  riskLevel: d.riskLevel as RiskLevel,
+  riskLevel: d.riskLevel,
   riskScore: d.riskScore,
   threatStatus: d.threatStatus,
   recommendation: d.recommendation,
-  checks: d.checks as CheckResult[],
-  reputation: d.reputation as ReputationResult[],
+  checks: d.checks,
+  reputation: d.reputation,
   createdAt: d.createdAt.toISOString(),
   userId: d.userId.toString(),
 })
 
 const scope = (userId?: string) => (userId ? { userId: new Types.ObjectId(userId) } : {})
 
+const newestFirst = async (filter: object, limit = HISTORY_LIMIT) =>
+  (await ScanModel.find(filter).sort({ createdAt: -1, _id: -1 }).limit(limit).lean<ScanDoc[]>()).map(toScan)
+
 export const scansRepo = {
-  /** Saves a scan and, when flagged, its report: one document, so one atomic write. */
-  async record(userId: string, scan: UnsavedScan, report: ReportFields | null): Promise<ScanResult> {
-    const doc = await ScanModel.create({ ...scan, userId: new Types.ObjectId(userId), report })
-    return toScan(doc.toObject() as ScanDoc)
+  /**
+   * Saves a scan, then bumps the user's activity counters for the admin list.
+   * The counters are informational, so failing to update them doesn't fail the scan.
+   */
+  async record(userId: string, scan: UnsavedScan): Promise<ScanResult> {
+    const doc = await ScanModel.create({ ...scan, userId: new Types.ObjectId(userId) })
+    await UserModel.updateOne({ _id: doc.userId }, { $inc: { scanCount: 1 }, $max: { lastActiveAt: doc.createdAt } }).catch(
+      (err: unknown) => console.error('could not update user activity counters', err),
+    )
+    return toScan(doc.toObject())
   },
 
   /** A user's scans, newest first. */
-  async listByUser(userId: string): Promise<ScanResult[]> {
-    const docs = await ScanModel.find(scope(userId)).sort({ createdAt: -1 }).limit(HISTORY_LIMIT).lean<ScanDoc[]>()
-    return docs.map(toScan)
-  },
+  listByUser: (userId: string) => newestFirst(scope(userId)),
+
+  /** A user's medium and high scans (their threat reports), newest first. */
+  listFlaggedByUser: (userId: string) => newestFirst({ ...scope(userId), riskLevel: { $in: FLAGGED } }),
 
   /** Platform-wide detection log, newest first. */
-  async listRecent(limit = HISTORY_LIMIT): Promise<ScanResult[]> {
-    const docs = await ScanModel.find().sort({ createdAt: -1 }).limit(limit).lean<ScanDoc[]>()
-    return docs.map(toScan)
-  },
+  listRecent: (limit = HISTORY_LIMIT) => newestFirst({}, limit),
 
   /** Scans per risk level, for one user or (without a user) the whole platform. */
   async levelCounts(userId?: string): Promise<LevelCounts> {
@@ -64,7 +73,7 @@ export const scansRepo = {
     const docs = await ScanModel.find({ ...scope(userId), createdAt: { $gte: since } }, { riskLevel: 1, createdAt: 1 }).lean<
       Pick<ScanDoc, 'riskLevel' | 'createdAt'>[]
     >()
-    return docs.map((d) => ({ riskLevel: d.riskLevel as RiskLevel, createdAt: d.createdAt.toISOString() }))
+    return docs.map((d) => ({ riskLevel: d.riskLevel, createdAt: d.createdAt.toISOString() }))
   },
 
   async countSince(since: Date): Promise<number> {

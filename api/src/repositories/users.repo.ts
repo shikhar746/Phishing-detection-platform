@@ -1,7 +1,5 @@
-import { Types } from 'mongoose'
-import type { AdminUser, Role } from '@phishlens/core'
+import type { AdminUser, Role, UserStatus } from '@phishlens/core'
 import { isObjectId } from '../lib/db.js'
-import { ScanModel } from '../models/scan.model.js'
 import { UserModel, type UserDoc } from '../models/user.model.js'
 
 // All reads and writes of users go through here, so controllers stay free of
@@ -9,7 +7,6 @@ import { UserModel, type UserDoc } from '../models/user.model.js'
 // Not-found returns null; any other database error throws and reaches the
 // error handler as a 500.
 
-export type UserStatus = AdminUser['status']
 
 /** The account as the API returns it; never includes credentials. */
 export interface PublicUser {
@@ -49,8 +46,8 @@ const toPublic = (d: UserDoc): PublicUser => ({
   id: d._id.toString(),
   email: d.email,
   name: d.name,
-  role: d.role as Role,
-  status: d.status as UserStatus,
+  role: d.role,
+  status: d.status,
 })
 
 const toSecret = (d: UserDoc): UserWithSecret => ({
@@ -59,21 +56,11 @@ const toSecret = (d: UserDoc): UserWithSecret => ({
   googleId: d.googleId ?? null,
 })
 
-/** Scan count and latest scan time per user id (all users, or just `userIds`). */
-async function activityByUser(userIds?: string[]): Promise<Map<string, { scans: number; last: Date }>> {
-  const match = userIds ? [{ $match: { userId: { $in: userIds.map((id) => new Types.ObjectId(id)) } } }] : []
-  const rows: { _id: Types.ObjectId; scans: number; last: Date }[] = await ScanModel.aggregate([
-    ...match,
-    { $group: { _id: '$userId', scans: { $sum: 1 }, last: { $max: '$createdAt' } } },
-  ])
-  return new Map(rows.map((r) => [r._id.toString(), { scans: r.scans, last: r.last }]))
-}
-
-function toAdminUser(d: UserDoc, activity?: { scans: number; last: Date }): AdminUser {
+function toAdminUser(d: UserDoc): AdminUser {
   return {
     ...toPublic(d),
-    scans: activity?.scans ?? 0,
-    lastActive: (activity?.last ?? d.createdAt).toISOString(),
+    scans: d.scanCount ?? 0,
+    lastActive: (d.lastActiveAt ?? d.createdAt).toISOString(),
     createdAt: d.createdAt.toISOString(),
   }
 }
@@ -105,7 +92,7 @@ export const usersRepo = {
         googleId: input.googleId ?? null,
         imageUrl: input.imageUrl ?? null,
       })
-      return toPublic(doc.toObject() as UserDoc)
+      return toPublic(doc.toObject())
     } catch (err) {
       if ((err as { code?: number }).code === DUPLICATE_KEY) throw new DuplicateEmailError()
       throw err
@@ -120,8 +107,8 @@ export const usersRepo = {
 
   /** Every account with its scan count and last activity, newest first. */
   async listOverview(): Promise<AdminUser[]> {
-    const [docs, activity] = await Promise.all([UserModel.find().sort({ createdAt: -1 }).lean<UserDoc[]>(), activityByUser()])
-    return docs.map((d) => toAdminUser(d, activity.get(d._id.toString())))
+    const docs = await UserModel.find().sort({ createdAt: -1, _id: -1 }).lean<UserDoc[]>()
+    return docs.map(toAdminUser)
   },
 
   async update(id: string, patch: UserPatch): Promise<AdminUser | null> {
@@ -129,7 +116,7 @@ export const usersRepo = {
     const changes = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined))
     const doc = await UserModel.findByIdAndUpdate(id, changes, { new: true, runValidators: true }).lean<UserDoc>()
     if (!doc) return null
-    return toAdminUser(doc, (await activityByUser([id])).get(id))
+    return toAdminUser(doc)
   },
 
   async counts(): Promise<{ total: number; active: number }> {
