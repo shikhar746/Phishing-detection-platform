@@ -3,6 +3,7 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
   test: {
     include: ['test/**/*.test.ts'],
+    setupFiles: ['test/setup.ts'],
     environment: 'node',
     // Set before src/config/env.ts loads; dotenv never overrides variables that
     // already exist, so tests never read secrets from api/.env.
@@ -17,6 +18,7 @@ export default defineConfig({
       GOOGLE_CLIENT_ID: 'test-client-id.apps.googleusercontent.com',
       CORS_ORIGIN: 'http://localhost:3000',
       RATE_LIMIT_MAX: '1000',
+      SCAN_RATE_LIMIT_MAX: '1000',
     },
   },
 })

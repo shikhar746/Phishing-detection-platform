@@ -1,10 +1,8 @@
 import request from 'supertest'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('../src/repositories/users.repo.js', () => import('./fakes/usersRepo.js'))
-
 const { default: app } = await import('../src/app.js')
-const { resetUsers, getRow } = await import('./fakes/usersRepo.js')
+const { getUserRow: getRow } = await import('./fakes/db.js')
 const { signAccessToken, signRefreshToken } = await import('../src/lib/tokens.js')
 
 const valid = { name: 'Priya Nair', email: 'Priya@Example.com', password: 'hunter2hunter' }
@@ -17,10 +15,6 @@ function cookies(res: request.Response): string[] {
 function cookieNamed(res: request.Response, name: string) {
   return cookies(res).find((c) => c.startsWith(`${name}=`))
 }
-
-beforeEach(() => {
-  resetUsers()
-})
 
 describe('app wiring', () => {
   it('answers the health check', async () => {
@@ -46,6 +40,12 @@ describe('app wiring', () => {
     expect(res.headers['access-control-allow-origin']).toBeUndefined()
   })
 
+  it('answers an oversized body with 413, not a 500', async () => {
+    const res = await request(app).post('/api/scans/email').send({ content: 'x'.repeat(200_000) })
+    expect(res.status).toBe(413)
+    expect(res.body.error.code).toBe('PAYLOAD_TOO_LARGE')
+  })
+
   it('answers malformed JSON with a 400, not a 500', async () => {
     const res = await request(app).post('/api/auth/login').set('Content-Type', 'application/json').send('{"email":')
     expect(res.status).toBe(400)
@@ -53,7 +53,7 @@ describe('app wiring', () => {
   })
 
   it('hides unexpected failures behind a generic 500', async () => {
-    const { usersRepo } = await import('./fakes/usersRepo.js')
+    const { usersRepo } = await import('./fakes/db.js')
     const spy = vi.spyOn(usersRepo, 'findByEmail').mockRejectedValueOnce(new Error('connection reset'))
     const log = vi.spyOn(console, 'error').mockImplementation(() => {})
     const res = await request(app).post('/api/auth/login').send({ email: 'a@example.com', password: 'x' })
@@ -135,7 +135,7 @@ describe('POST /api/auth/login', () => {
   })
 
   it('rejects password login for a Google-only account', async () => {
-    const { usersRepo } = await import('./fakes/usersRepo.js')
+    const { usersRepo } = await import('./fakes/db.js')
     await usersRepo.create({ email: 'g@example.com', name: 'G', googleId: 'google-sub-1' })
     const res = await request(app).post('/api/auth/login').send({ email: 'g@example.com', password: 'anything1' })
     expect(res.status).toBe(401)
@@ -144,6 +144,36 @@ describe('POST /api/auth/login', () => {
   it('validates the body', async () => {
     const res = await request(app).post('/api/auth/login').send({ email: valid.email })
     expect(res.status).toBe(400)
+  })
+})
+
+describe('suspended accounts', () => {
+  async function suspendedAgent() {
+    const agent = request.agent(app)
+    const res = await agent.post('/api/auth/register').send(valid)
+    const { setUser } = await import('./fakes/db.js')
+    setUser(res.body.user.id, { status: 'suspended' })
+    return agent
+  }
+
+  it('cannot sign in, even with the right password', async () => {
+    await suspendedAgent()
+    const res = await request(app).post('/api/auth/login').send({ email: valid.email, password: valid.password })
+    expect(res.status).toBe(403)
+    expect(res.body.error.code).toBe('ACCOUNT_SUSPENDED')
+    expect(cookies(res)).toHaveLength(0)
+  })
+
+  it('still gets the generic error for a wrong password, so suspension is not revealed', async () => {
+    await suspendedAgent()
+    const res = await request(app).post('/api/auth/login').send({ email: valid.email, password: 'wrong-pass-1' })
+    expect(res.status).toBe(401)
+  })
+
+  it('cannot refresh or read an existing session', async () => {
+    const agent = await suspendedAgent()
+    expect((await agent.post('/api/auth/refresh')).status).toBe(403)
+    expect((await agent.get('/api/auth/me')).status).toBe(403)
   })
 })
 

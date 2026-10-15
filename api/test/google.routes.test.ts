@@ -2,7 +2,6 @@ import request from 'supertest'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { GoogleProfile } from '../src/lib/google.js'
 
-vi.mock('../src/repositories/users.repo.js', () => import('./fakes/usersRepo.js'))
 vi.mock('../src/lib/google.js', () => ({
   isGoogleSignInEnabled: vi.fn(() => true),
   verifyGoogleIdToken: vi.fn(),
@@ -10,7 +9,7 @@ vi.mock('../src/lib/google.js', () => ({
 
 const { default: app } = await import('../src/app.js')
 const google = await import('../src/lib/google.js')
-const { resetUsers, getRow, usersRepo } = await import('./fakes/usersRepo.js')
+const { getUserRow: getRow, usersRepo } = await import('./fakes/db.js')
 
 const credential = 'header.payload.signature-from-google-identity-services'
 const profile: GoogleProfile = {
@@ -21,7 +20,6 @@ const profile: GoogleProfile = {
 }
 
 beforeEach(() => {
-  resetUsers()
   vi.mocked(google.isGoogleSignInEnabled).mockReturnValue(true)
   vi.mocked(google.verifyGoogleIdToken).mockReset()
 })
@@ -74,6 +72,27 @@ describe('POST /api/auth/google', () => {
     vi.mocked(google.verifyGoogleIdToken).mockResolvedValue({ ...profile, email: 'new-address@example.com' })
     const second = await request(app).post('/api/auth/google').send({ credential })
     expect(second.body.user.id).toBe(first.body.user.id)
+  })
+
+  it('refuses to re-link an account already tied to a different Google identity', async () => {
+    const existing = await usersRepo.create({ email: profile.email, name: 'Ananya', googleId: 'original-google-sub' })
+    vi.mocked(google.verifyGoogleIdToken).mockResolvedValue({ ...profile, googleId: 'someone-elses-sub' })
+
+    const res = await request(app).post('/api/auth/google').send({ credential })
+    expect(res.status).toBe(409)
+    expect(res.body.error.code).toBe('GOOGLE_ACCOUNT_MISMATCH')
+    expect(getRow(existing.id)!.google_id).toBe('original-google-sub')
+    expect(String(res.headers['set-cookie'] ?? '')).not.toMatch(/accessToken=/)
+  })
+
+  it('refuses suspended accounts', async () => {
+    const { setUser } = await import('./fakes/db.js')
+    vi.mocked(google.verifyGoogleIdToken).mockResolvedValue(profile)
+    const first = await request(app).post('/api/auth/google').send({ credential })
+    setUser(first.body.user.id, { status: 'suspended' })
+    const res = await request(app).post('/api/auth/google').send({ credential })
+    expect(res.status).toBe(403)
+    expect(res.body.error.code).toBe('ACCOUNT_SUSPENDED')
   })
 
   it('links Google to an existing password account with the same email', async () => {
