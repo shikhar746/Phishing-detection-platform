@@ -16,6 +16,7 @@
     "typecheck": "npm run build -w @phishlens/core && npm run typecheck -w api && npx -w web tsc --noEmit",
     "dev:api": "npm run dev -w api",
     "dev:web": "npm run dev -w web",
-    "seed": "npm run seed -w api"
+    "db:local": "npm run db:local -w api",
+    "seed": "npm run seed -w api --"
   }
 }
