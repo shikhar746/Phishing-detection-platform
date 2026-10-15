@@ -1,12 +1,12 @@
-// Threat reports. Planned API contract:
+// Threat reports (api/src/routes/reports.routes.ts):
 //   GET /api/reports -> { reports: ThreatReport[] }
-// The API would write a row to the `reports` table whenever a scan comes back
-// medium/high, plus a weekly summary row from a scheduled job.
+// The API stores a report row with every medium/high scan; the summary and
+// de-duplication come from presentReports in @phishlens/core.
 
 import { USE_MOCKS } from "@/lib/config";
 import { api } from "@/lib/api/client";
 import { mockReportService } from "@/lib/mock/services/reports";
-import type { ThreatReport } from "@/lib/types";
+import type { ThreatReport } from "@phishlens/core";
 
 export interface ReportService {
   list(): Promise<ThreatReport[]>;

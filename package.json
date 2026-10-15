@@ -1,0 +1,21 @@
+{
+  "name": "phishlens",
+  "private": true,
+  "description": "AI Phishing Detection Platform — web app, API and shared analysis engine",
+  "workspaces": [
+    "packages/*",
+    "api",
+    "web"
+  ],
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "build": "npm run build -w @phishlens/core && npm run build -w api && npm run build -w web",
+    "test": "npm run build -w @phishlens/core && npm test -w @phishlens/core -w api -w web",
+    "typecheck": "npm run build -w @phishlens/core && npm run typecheck -w api && npx -w web tsc --noEmit",
+    "dev:api": "npm run dev -w api",
+    "dev:web": "npm run dev -w web",
+    "seed": "npm run seed -w api"
+  }
+}

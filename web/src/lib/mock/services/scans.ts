@@ -1,7 +1,5 @@
 import type { ScanService } from "@/lib/services/scans";
-import { computeDaily, computeStats } from "@/lib/stats";
-import type { ScanType } from "@/lib/types";
-import { normalizeUrl } from "@/lib/validation";
+import { computeDaily, computeStats, normalizeUrl, type ScanType } from "@phishlens/core";
 import { buildScan, SELF } from "../seed";
 import { db, latency } from "../store";
 

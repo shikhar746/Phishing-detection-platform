@@ -4,7 +4,7 @@
 
 import { MOCK_FAILURE_RATE } from "@/lib/config";
 import { ApiError } from "@/lib/api/client";
-import type { AdminUser, ScanResult, SuspiciousKeyword, User } from "@/lib/types";
+import type { AdminUser, ScanResult, SuspiciousKeyword, User } from "@phishlens/core";
 import { SELF, seedKeywords, seedScans, seedUsers } from "./seed";
 
 const PREFIX = "phishlens.v1.";

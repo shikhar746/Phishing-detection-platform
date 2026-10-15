@@ -2,10 +2,7 @@
 // analyzer over sample inputs, so every check and score is self-consistent.
 // All domains below are fictional examples.
 
-import { analyzeEmail } from "@/lib/analysis/email";
-import { analyzeUrl } from "@/lib/analysis/url";
-import { DEFAULT_KEYWORDS, type KeywordRule } from "@/lib/analysis/keywords";
-import type { AdminUser, ReputationResult, ScanResult, ScanType, SuspiciousKeyword } from "@/lib/types";
+import { DEFAULT_KEYWORDS, analyzeEmail, analyzeUrl, type AdminUser, type KeywordRule, type ReputationResult, type ScanResult, type ScanType, type SuspiciousKeyword } from "@phishlens/core";
 
 /** Scans seeded for whoever is signed in use this owner id. */
 export const SELF = "self";

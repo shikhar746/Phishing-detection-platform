@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Field, Textarea } from "@/components/ui/Field";
 import { cn } from "@/lib/cn";
 import { formatNumber } from "@/lib/format";
-import { EMAIL_MAX_LENGTH, validateEmailContent } from "@/lib/validation";
+import { EMAIL_MAX_LENGTH, validateEmailContent } from "@phishlens/core";
 
 const SAMPLES: { label: string; text: string }[] = [
   { label: "Bank suspension", text: "Your bank account will be suspended. Verify immediately." },

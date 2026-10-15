@@ -12,9 +12,9 @@ import { SearchInput } from "@/components/ui/SearchInput";
 import { EmptyState, Skeleton } from "@/components/ui/States";
 import { ScanResultCard } from "@/components/scanner/ScanResultCard";
 import { cn } from "@/lib/cn";
-import { formatDateTime, formatRelative, shortContent } from "@/lib/format";
+import { shortContent, type RiskLevel, type ScanResult, type ScanType } from "@phishlens/core";
+import { formatDateTime, formatRelative } from "@/lib/format";
 import type { UseAsyncResult } from "@/lib/hooks/useAsync";
-import type { RiskLevel, ScanResult, ScanType } from "@/lib/types";
 
 const PAGE_SIZE = 8;
 

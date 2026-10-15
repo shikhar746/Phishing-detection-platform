@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { authService, type LoginInput, type RegisterInput } from "@/lib/services/auth";
-import type { User } from "@/lib/types";
+import type { User } from "@phishlens/core";
 
 interface Session {
   user: User | null;

@@ -1,5 +1,5 @@
 import { Link2, Mail } from "lucide-react";
-import type { ScanType } from "@/lib/types";
+import type { ScanType } from "@phishlens/core";
 
 /** Decorative icon for what was scanned. */
 export function ScanTypeIcon({ type, className }: { type: ScanType; className?: string }) {

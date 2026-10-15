@@ -1,4 +1,4 @@
-import type { KeywordCategory } from "@/lib/types";
+import type { KeywordCategory } from "../types.js";
 
 export interface KeywordRule {
   term: string;

@@ -14,7 +14,7 @@ import { TabPanel, Tabs } from "@/components/ui/Tabs";
 import { useAuth } from "@/context/AuthProvider";
 import { useAsync } from "@/lib/hooks/useAsync";
 import { adminService } from "@/lib/services/admin";
-import type { AdminAnalytics } from "@/lib/types";
+import type { AdminAnalytics } from "@phishlens/core";
 import { KeywordManager } from "./KeywordManager";
 import { UserManagement } from "./UserManagement";
 

@@ -1,5 +1,5 @@
 import { Reveal } from "@/components/motion/Reveal";
-import { DEFAULT_KEYWORDS } from "@/lib/analysis/keywords";
+import { DEFAULT_KEYWORDS } from "@phishlens/core";
 
 // Product facts, not usage numbers — swap in live platform totals from the
 // API (e.g. GET /api/stats/public) once real traffic exists.

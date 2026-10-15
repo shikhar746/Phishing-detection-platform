@@ -13,7 +13,7 @@ import { EmptyState, Skeleton } from "@/components/ui/States";
 import { useAuth } from "@/context/AuthProvider";
 import { useAsync } from "@/lib/hooks/useAsync";
 import { scanService } from "@/lib/services/scans";
-import type { ScanStats } from "@/lib/types";
+import type { ScanStats } from "@phishlens/core";
 
 const CHART_TITLE = "Scans per day by risk level, last 14 days";
 

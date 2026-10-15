@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analyzeEmail } from "@/lib/analysis/email";
-import { categorize, levelForScore } from "@/lib/analysis/score";
-import { analyzeUrl, registrableDomain } from "@/lib/analysis/url";
-import { DEFAULT_KEYWORDS } from "@/lib/analysis/keywords";
+import { analyzeEmail, analyzeUrl, categorize, DEFAULT_KEYWORDS, levelForScore, registrableDomain } from "../src/index.js";
 
 const fired = (checks: { id: string; weight: number }[]) => checks.filter((c) => c.weight > 0).map((c) => c.id);
 
@@ -127,10 +124,13 @@ describe("categorize", () => {
 
 describe("score regression anchors", () => {
   // values observed in the running app before the rules were split into modules
-  it("keeps the documented examples' exact scores", async () => {
-    const { analyzeUrlWithMockReputation } = await import("@/lib/mock/seed");
+  it("keeps the documented examples' exact scores", () => {
     expect(analyzeUrl("http://secure-paypal-login-free.com", DEFAULT_KEYWORDS).riskScore).toBe(72);
-    expect(analyzeUrlWithMockReputation("http://secure-paypal-login-free.com").riskScore).toBe(94);
+    const bothFlagged = analyzeUrl("http://secure-paypal-login-free.com", DEFAULT_KEYWORDS, [
+      { source: "virustotal", status: "flagged", summary: "14 / 94" },
+      { source: "safe-browsing", status: "flagged", summary: "SOCIAL_ENGINEERING" },
+    ]);
+    expect(bothFlagged.riskScore).toBe(94);
     expect(analyzeEmail("Your bank account will be suspended. Verify immediately.", DEFAULT_KEYWORDS).riskScore).toBe(65);
   });
 
@@ -138,5 +138,29 @@ describe("score regression anchors", () => {
     const ids = analyzeUrl("http://192.168.4.21/login", DEFAULT_KEYWORDS).checks.map((c) => c.id);
     expect(ids).toContain("ip-host");
     expect(ids).not.toContain("structure");
+  });
+});
+
+describe("whole-word keyword matching", () => {
+  const fired = (url: string) => analyzeUrl(url, DEFAULT_KEYWORDS).checks.filter((c) => c.weight > 0).map((c) => c.id);
+
+  it("does not see brands inside unrelated words", () => {
+    expect(fired("https://www.purchase-orders.com")).not.toContain("brand");
+    expect(fired("https://pineapple-recipes.com")).not.toContain("brand");
+  });
+
+  it("does not see bait words inside longer words", () => {
+    expect(fired("https://freedom-forum.org")).not.toContain("keywords");
+  });
+
+  it("still catches brands and bait words between separators", () => {
+    expect(fired("http://chase-secure-banking.ml/confirm")).toEqual(expect.arrayContaining(["brand", "keywords"]));
+    expect(fired("https://example.com/office365/login.php")).toContain("brand");
+  });
+
+  it("matches multi-word admin keywords as consecutive words", () => {
+    const keywords = [...DEFAULT_KEYWORDS, { term: "gift card", category: "url" as const, weight: 30 }];
+    expect(analyzeUrl("https://example.com/gift-card/claim", keywords).checks.find((c) => c.id === "keywords")?.weight).toBeGreaterThan(0);
+    expect(analyzeUrl("https://example.com/gift/the-card", keywords).checks.find((c) => c.id === "keywords")?.weight).toBe(0);
   });
 });

@@ -1,10 +1,10 @@
 // URL rules. Each rule looks at one aspect of the link; add a rule by adding a
 // function to URL_RULES.
 
-import type { ReputationResult } from "@/lib/types";
-import { normalizeUrl } from "@/lib/validation";
-import { OFFICIAL_BRAND_DOMAINS, SUSPICIOUS_TLDS, URL_SHORTENERS, type KeywordRule } from "./keywords";
-import { passed, runRules, score, type Analysis, type Rule } from "./score";
+import type { ReputationResult } from "../types.js";
+import { normalizeUrl } from "../validation.js";
+import { OFFICIAL_BRAND_DOMAINS, SUSPICIOUS_TLDS, URL_SHORTENERS, type KeywordRule } from "./keywords.js";
+import { passed, runRules, score, type Analysis, type Rule } from "./score.js";
 
 interface UrlContext {
   href: string;
@@ -12,10 +12,22 @@ interface UrlContext {
   host: string;
   /** Registrable domain, e.g. "paypal.com" for "www.paypal.com". */
   domain: string;
-  /** Lowercased full URL, for keyword matching. */
-  full: string;
+  /** The URL split into lowercase words, for keyword matching. */
+  words: string[];
   isIp: boolean;
   keywords: KeywordRule[];
+}
+
+const toWords = (text: string) => text.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+
+/**
+ * Whole-word match, so "chase" doesn't fire on "purchase" or "apple" on
+ * "pineapple". Multi-word terms ("gift card") must appear as consecutive words.
+ */
+function hasTerm(words: string[], term: string): boolean {
+  const needle = toWords(term);
+  if (!needle.length) return false;
+  return words.some((_, i) => needle.every((w, j) => words[i + j] === w));
 }
 
 const MULTI_PART_SUFFIXES = new Set(["co.uk", "com.au", "co.in", "co.jp", "com.br", "ac.uk", "gov.uk", "org.uk"]);
@@ -60,9 +72,9 @@ const punycode: Rule<UrlContext> = ({ host }) =>
       }
     : null;
 
-const brandImpersonation: Rule<UrlContext> = ({ full, domain, keywords }) => {
+const brandImpersonation: Rule<UrlContext> = ({ words, domain, keywords }) => {
   const impersonated = keywords.filter(
-    (k) => k.category === "brand" && full.includes(k.term) && !(OFFICIAL_BRAND_DOMAINS[k.term] ?? []).includes(domain),
+    (k) => k.category === "brand" && hasTerm(words, k.term) && !(OFFICIAL_BRAND_DOMAINS[k.term] ?? []).includes(domain),
   );
   const first = impersonated[0];
   if (!first) return passed("brand", "Brand impersonation", "No well-known brand is being imitated.");
@@ -75,8 +87,8 @@ const brandImpersonation: Rule<UrlContext> = ({ full, domain, keywords }) => {
   };
 };
 
-const suspiciousKeywords: Rule<UrlContext> = ({ full, keywords }) => {
-  const terms = keywords.filter((k) => k.category === "url" && full.includes(k.term));
+const suspiciousKeywords: Rule<UrlContext> = ({ words, keywords }) => {
+  const terms = keywords.filter((k) => k.category === "url" && hasTerm(words, k.term));
   if (!terms.length) return passed("keywords", "Suspicious keywords", "No phishing-related keywords found.");
   return {
     id: "keywords",
@@ -126,7 +138,7 @@ export function analyzeUrl(rawUrl: string, keywords: KeywordRule[], reputation: 
     protocol: url.protocol,
     host,
     domain: registrableDomain(host),
-    full: href.toLowerCase(),
+    words: toWords(href),
     isIp: /^\d{1,3}(\.\d{1,3}){3}$/.test(host),
     keywords,
   };

@@ -13,7 +13,7 @@ import { cn } from "@/lib/cn";
 import { formatDate, formatRelative, initials } from "@/lib/format";
 import type { UseAsyncResult } from "@/lib/hooks/useAsync";
 import { adminService, type UserPatch } from "@/lib/services/admin";
-import type { AdminUser, Role } from "@/lib/types";
+import type { AdminUser, Role } from "@phishlens/core";
 
 export function UserManagement({ state }: { state: UseAsyncResult<AdminUser[]> }) {
   const { user: me } = useAuth();

@@ -1,7 +1,6 @@
 import { ShieldAlert, ShieldCheck, ShieldQuestion } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { RISK_LABEL } from "@/lib/format";
-import type { RiskLevel } from "@/lib/types";
+import { RISK_LABEL, type RiskLevel } from "@phishlens/core";
 
 export const riskStyles: Record<RiskLevel, { badge: string; text: string; fill: string; soft: string; Icon: typeof ShieldCheck }> = {
   low: {

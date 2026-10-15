@@ -1,6 +1,6 @@
 import { ApiError } from "@/lib/api/client";
 import type { AuthService } from "@/lib/services/auth";
-import type { User } from "@/lib/types";
+import type { User } from "@phishlens/core";
 import { hash } from "../seed";
 import { db, latency } from "../store";
 

@@ -1,4 +1,4 @@
-// Admin endpoints. Planned API contract (all require role = admin):
+// Admin endpoints (api/src/routes/admin.routes.ts), all admin-only:
 //   GET    /api/admin/analytics          -> { analytics: AdminAnalytics, daily: DailyDetections[] }
 //   GET    /api/admin/users              -> { users: AdminUser[] }
 //   PATCH  /api/admin/users/:id          { role?, status? } -> { user: AdminUser }
@@ -10,15 +10,7 @@
 import { USE_MOCKS } from "@/lib/config";
 import { api } from "@/lib/api/client";
 import { mockAdminService } from "@/lib/mock/services/admin";
-import type {
-  AdminAnalytics,
-  AdminUser,
-  DailyDetections,
-  KeywordCategory,
-  ScanResult,
-  SuspiciousKeyword,
-} from "@/lib/types";
-import { normalizeKeywordTerm } from "@/lib/validation";
+import { normalizeKeywordTerm, type AdminAnalytics, type AdminUser, type DailyDetections, type KeywordCategory, type ScanResult, type SuspiciousKeyword } from "@phishlens/core";
 
 export type UserPatch = Partial<Pick<AdminUser, "role" | "status">>;
 export interface NewKeyword {

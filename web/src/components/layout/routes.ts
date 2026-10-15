@@ -1,5 +1,5 @@
 import { FileWarning, LayoutDashboard, ScanSearch, ShieldEllipsis, type LucideIcon } from "lucide-react";
-import type { User } from "@/lib/types";
+import type { User } from "@phishlens/core";
 
 /** Who may open a page inside the app shell. */
 export type Access = "public" | "user" | "admin";

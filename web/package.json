@@ -8,9 +8,14 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "build:core": "npm --prefix ../packages/core run build",
+    "predev": "npm --prefix ../packages/core run build",
+    "prebuild": "npm --prefix ../packages/core run build",
+    "pretest": "npm --prefix ../packages/core run build"
   },
   "dependencies": {
+    "@phishlens/core": "*",
     "clsx": "^2.1.1",
     "framer-motion": "^14.0.0",
     "lucide-react": "^1.52.0",
@@ -28,5 +33,8 @@
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^5.0.3"
+  },
+  "engines": {
+    "node": ">=22.12"
   }
 }

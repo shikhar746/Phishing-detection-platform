@@ -5,7 +5,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Field, Input } from "@/components/ui/Field";
 import { cn } from "@/lib/cn";
-import { validateUrl } from "@/lib/validation";
+import { validateUrl } from "@phishlens/core";
 
 const SAMPLES = ["http://secure-paypal-login-free.com", "https://github.com/vercel/next.js", "https://bit.ly/3xYz9Qa"];
 

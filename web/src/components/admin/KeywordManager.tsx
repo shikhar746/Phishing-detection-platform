@@ -10,11 +10,9 @@ import { SearchInput } from "@/components/ui/SearchInput";
 import { EmptyState, Skeleton } from "@/components/ui/States";
 import { errorMessage } from "@/lib/api/client";
 import { cn } from "@/lib/cn";
-import { KEYWORD_CATEGORY_LABEL } from "@/lib/format";
+import { KEYWORD_CATEGORIES, KEYWORD_CATEGORY_LABEL, validateKeyword, type KeywordCategory, type SuspiciousKeyword } from "@phishlens/core";
 import type { UseAsyncResult } from "@/lib/hooks/useAsync";
 import { adminService } from "@/lib/services/admin";
-import { KEYWORD_CATEGORIES, type KeywordCategory, type SuspiciousKeyword } from "@/lib/types";
-import { validateKeyword } from "@/lib/validation";
 
 const WEIGHTS = [5, 8, 10, 15, 20, 25, 30];
 

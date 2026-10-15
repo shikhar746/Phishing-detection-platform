@@ -1,4 +1,4 @@
-// Scans against the Express API. Planned contract (to add to /api):
+// Scans against the Express API (api/src/routes/scans.routes.ts):
 //   POST /api/scans/url    { url }      -> { scan: ScanResult }
 //   POST /api/scans/email  { content }  -> { scan: ScanResult }
 //   GET  /api/scans                     -> { scans: ScanResult[] }   (current user)
@@ -7,8 +7,7 @@
 import { USE_MOCKS } from "@/lib/config";
 import { api } from "@/lib/api/client";
 import { mockScanService } from "@/lib/mock/services/scans";
-import type { DailyDetections, ScanResult, ScanStats } from "@/lib/types";
-import { normalizeUrl } from "@/lib/validation";
+import { normalizeUrl, type DailyDetections, type ScanResult, type ScanStats } from "@phishlens/core";
 
 export interface ScanService {
   scanUrl(url: string): Promise<ScanResult>;

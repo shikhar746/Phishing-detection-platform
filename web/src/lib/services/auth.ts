@@ -4,7 +4,7 @@
 import { USE_MOCKS } from "@/lib/config";
 import { api, ApiError } from "@/lib/api/client";
 import { mockAuthService } from "@/lib/mock/services/auth";
-import type { User } from "@/lib/types";
+import type { User } from "@phishlens/core";
 
 export interface LoginInput {
   email: string;

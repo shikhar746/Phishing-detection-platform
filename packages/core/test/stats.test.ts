@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeDaily, computeStats } from "@/lib/stats";
-import type { RiskLevel, ScanResult } from "@/lib/types";
+import { computeDaily, computeStats, type RiskLevel, type ScanResult } from "../src/index.js";
 
 function scan(riskLevel: RiskLevel, createdAt: Date): ScanResult {
   return {

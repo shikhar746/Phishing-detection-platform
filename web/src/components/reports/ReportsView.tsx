@@ -15,10 +15,10 @@ import { RiskBadge } from "@/components/ui/RiskBadge";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { EmptyState, Skeleton } from "@/components/ui/States";
 import { downloadCsv, toCsv } from "@/lib/csv";
-import { CATEGORY_LABEL, formatDateTime } from "@/lib/format";
+import { CATEGORY_LABEL, THREAT_CATEGORIES, type RiskLevel, type ScanReport, type ScanResult, type SummaryReport, type ThreatCategory } from "@phishlens/core";
+import { formatDateTime } from "@/lib/format";
 import { useAsync } from "@/lib/hooks/useAsync";
 import { reportService } from "@/lib/services/reports";
-import { THREAT_CATEGORIES, type RiskLevel, type ScanReport, type ScanResult, type SummaryReport, type ThreatCategory } from "@/lib/types";
 
 interface Filters {
   query: string;

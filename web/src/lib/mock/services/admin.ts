@@ -1,8 +1,6 @@
 import { ApiError } from "@/lib/api/client";
 import type { AdminService } from "@/lib/services/admin";
-import { computeDaily } from "@/lib/stats";
-import type { SuspiciousKeyword } from "@/lib/types";
-import { normalizeKeywordTerm } from "@/lib/validation";
+import { computeDaily, normalizeKeywordTerm, type SuspiciousKeyword } from "@phishlens/core";
 import { SELF } from "../seed";
 import { db, latency } from "../store";
 

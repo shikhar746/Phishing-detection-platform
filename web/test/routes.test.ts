@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { accessFor, gate, visibleRoutes } from "@/components/layout/routes";
-import type { User } from "@/lib/types";
+import type { User } from "@phishlens/core";
 
 const member: User = { id: "u1", email: "m@example.com", name: "Member", role: "user" };
 const admin: User = { ...member, id: "u2", role: "admin" };

@@ -1,5 +1,5 @@
-// Shared domain types. These mirror the planned database tables (users,
-// scan_history, reports) so the real API can return the same shapes.
+// Shared domain types: the API contract and the shape of database rows
+// (users, scan_history, reports, keywords).
 
 export type Role = "user" | "admin";
 

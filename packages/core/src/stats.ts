@@ -1,9 +1,9 @@
 // Pure aggregations over scans. Used by the mock services today and suitable
 // for the API's /stats endpoints later.
 
-import type { DailyDetections, ScanResult, ScanStats } from "@/lib/types";
+import type { DailyDetections, ScanResult, ScanStats } from "./types.js";
 
-export function computeStats(scans: ScanResult[]): ScanStats {
+export function computeStats(scans: Pick<ScanResult, "riskLevel">[]): ScanStats {
   return {
     total: scans.length,
     safe: scans.filter((s) => s.riskLevel === "low").length,
@@ -13,7 +13,7 @@ export function computeStats(scans: ScanResult[]): ScanStats {
 }
 
 /** One row per local calendar day, oldest first, ending today. */
-export function computeDaily(scans: ScanResult[], days = 14, now = new Date()): DailyDetections[] {
+export function computeDaily(scans: Pick<ScanResult, "riskLevel" | "createdAt">[], days = 14, now = new Date()): DailyDetections[] {
   const rows: DailyDetections[] = [];
   const byDate = new Map<string, DailyDetections>();
   for (let i = days - 1; i >= 0; i--) {

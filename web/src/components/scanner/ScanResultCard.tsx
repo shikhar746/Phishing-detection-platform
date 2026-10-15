@@ -9,7 +9,7 @@ import { RiskBadge, riskStyles } from "@/components/ui/RiskBadge";
 import { ScanTypeIcon } from "@/components/ui/ScanTypeIcon";
 import { cn } from "@/lib/cn";
 import { formatDateTime } from "@/lib/format";
-import type { CheckResult, RiskLevel, ScanResult, ScanType } from "@/lib/types";
+import type { CheckResult, RiskLevel, ScanResult, ScanType } from "@phishlens/core";
 import { RiskGauge } from "./RiskGauge";
 
 const GUIDANCE: Record<ScanType, Record<RiskLevel, string>> = {

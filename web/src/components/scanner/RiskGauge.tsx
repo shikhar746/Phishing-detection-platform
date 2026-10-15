@@ -3,9 +3,7 @@
 import { animate, motion, useMotionValue, useReducedMotion, useTransform } from "framer-motion";
 import { useEffect } from "react";
 import { cn } from "@/lib/cn";
-import { RISK_THRESHOLDS } from "@/lib/config";
-import { RISK_LABEL } from "@/lib/format";
-import type { RiskLevel } from "@/lib/types";
+import { RISK_LABEL, RISK_THRESHOLDS, type RiskLevel } from "@phishlens/core";
 
 const stroke: Record<RiskLevel, string> = {
   low: "stroke-risk-low",

@@ -10,7 +10,7 @@ import { Field, Input } from "@/components/ui/Field";
 import { useAuth } from "@/context/AuthProvider";
 import { ApiError, errorMessage } from "@/lib/api/client";
 import { USE_MOCKS } from "@/lib/config";
-import type { User } from "@/lib/types";
+import type { User } from "@phishlens/core";
 import { validateEmailAddress, validateName, validatePassword } from "@/lib/validation";
 import { GoogleSignInButton, googleSignInAvailable } from "./GoogleSignInButton";
 

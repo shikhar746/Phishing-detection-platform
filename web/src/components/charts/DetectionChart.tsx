@@ -5,7 +5,7 @@ import { BarChart3, Table2 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/cn";
 import { useElementWidth } from "@/lib/hooks/useElementWidth";
-import type { DailyDetections, RiskLevel } from "@/lib/types";
+import type { DailyDetections, RiskLevel } from "@phishlens/core";
 
 /*
  * Stacked daily detections by risk level. Colors are the brand risk tokens

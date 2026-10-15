@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { Spinner } from "@/components/ui/Spinner";
 import { cn } from "@/lib/cn";
-import type { ScanType } from "@/lib/types";
+import type { ScanType } from "@phishlens/core";
 
 const STEPS: Record<ScanType, string[]> = {
   url: [

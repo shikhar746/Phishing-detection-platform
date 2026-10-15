@@ -1,8 +1,10 @@
 // Turns rule results into a verdict: score, level, status and recommendation.
 // Pure, so the API can reuse it unchanged.
 
-import { RISK_THRESHOLDS } from "@/lib/config";
-import type { CheckResult, ReputationResult, RiskLevel, ScanType, ThreatCategory } from "@/lib/types";
+import type { CheckResult, ReputationResult, RiskLevel, ScanType, ThreatCategory } from "../types.js";
+
+/** Risk thresholds on the 0–100 score. */
+export const RISK_THRESHOLDS = { medium: 35, high: 65 } as const;
 
 export interface Analysis {
   riskScore: number;

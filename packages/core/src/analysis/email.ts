@@ -1,9 +1,9 @@
 // Email / message rules. Links found in the text are scored with the URL rules.
 
-import type { CheckResult, KeywordCategory } from "@/lib/types";
-import type { KeywordRule } from "./keywords";
-import { passed, runRules, score, type Analysis, type Rule } from "./score";
-import { analyzeUrl } from "./url";
+import type { CheckResult, KeywordCategory } from "../types.js";
+import type { KeywordRule } from "./keywords.js";
+import { passed, runRules, score, type Analysis, type Rule } from "./score.js";
+import { analyzeUrl } from "./url.js";
 
 interface EmailContext {
   text: string;
