@@ -100,10 +100,10 @@ export const googleAuthController = async (req: Request, res: Response) => {
     return res.status(201).json({ user: created })
 }
 
+// requireAuth has already loaded the account and checked it is active
 export const meController = async (req: Request, res: Response) => {
-    const user = req.userId ? await usersRepo.findById(req.userId) : null
-    if (!user) throw notLoggedIn()
-    res.status(200).json({ user: assertActive(user) })
+    if (!req.user) throw notLoggedIn()
+    res.status(200).json({ user: req.user })
 }
 
 export const refreshController = async (req: Request, res: Response) => {

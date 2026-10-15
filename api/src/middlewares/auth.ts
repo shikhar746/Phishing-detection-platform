@@ -1,20 +1,38 @@
 import type { Request, Response, NextFunction } from "express"
+import { isObjectId } from "../lib/db.js"
 import { HttpError } from "../lib/httpError.js"
 import { verifyAccessToken } from "../lib/tokens.js"
-import { usersRepo } from "../repositories/users.repo.js"
+import { usersRepo, type PublicUser } from "../repositories/users.repo.js"
 
-function userIdFrom(token: string): string {
+/**
+ * The account behind an access token, re-read on every request so that
+ * suspending, demoting or deleting an account takes effect immediately —
+ * not when the token expires.
+ */
+async function activeUserFrom(token: string): Promise<PublicUser> {
   const payload = verifyAccessToken(token)
-  // INVALID_TOKEN tells the client to refresh and retry
-  if (!payload) throw new HttpError(401, "INVALID_TOKEN", "Session expired")
-  return payload.sub
+  // INVALID_TOKEN tells the client to refresh and retry. A sub that isn't an
+  // ObjectId (e.g. a token from before the MongoDB migration) is just as invalid.
+  if (!payload || !isObjectId(payload.sub)) throw new HttpError(401, "INVALID_TOKEN", "Session expired")
+
+  const user = await usersRepo.findById(payload.sub)
+  if (!user) throw new HttpError(401, "UNAUTHENTICATED", "Not logged in")
+  if (user.status !== "active") {
+    throw new HttpError(403, "ACCOUNT_SUSPENDED", "This account has been suspended. Contact an administrator.")
+  }
+  return user
 }
 
-/** The request must carry a valid access token. */
-export const requireAuth = (req: Request, _res: Response, next: NextFunction) => {
+function signIn(req: Request, user: PublicUser) {
+  req.user = user
+  req.userId = user.id
+}
+
+/** The request must come from a signed-in, active account. */
+export const requireAuth = async (req: Request, _res: Response, next: NextFunction) => {
   const token: string | undefined = req.cookies?.accessToken
   if (!token) throw new HttpError(401, "UNAUTHENTICATED", "Not logged in")
-  req.userId = userIdFrom(token)
+  signIn(req, await activeUserFrom(token))
   next()
 }
 
@@ -23,21 +41,14 @@ export const requireAuth = (req: Request, _res: Response, next: NextFunction) =>
  * still a 401: the user is signed in and should refresh, not silently lose
  * the work (e.g. a scan that would not be saved to their history).
  */
-export const optionalAuth = (req: Request, _res: Response, next: NextFunction) => {
+export const optionalAuth = async (req: Request, _res: Response, next: NextFunction) => {
   const token: string | undefined = req.cookies?.accessToken
-  if (token) req.userId = userIdFrom(token)
+  if (token) signIn(req, await activeUserFrom(token))
   next()
 }
 
-/**
- * Admin only. Role and status are re-read from the database rather than
- * trusted from the token, so demoting or suspending an admin takes effect
- * at once. Use after requireAuth.
- */
-export const requireAdmin = async (req: Request, _res: Response, next: NextFunction) => {
-  const user = req.userId ? await usersRepo.findById(req.userId) : null
-  if (!user || user.role !== "admin" || user.status !== "active") {
-    throw new HttpError(403, "FORBIDDEN", "Admins only")
-  }
+/** Admin only. Use after requireAuth, which has already loaded the current account. */
+export const requireAdmin = (req: Request, _res: Response, next: NextFunction) => {
+  if (req.user?.role !== "admin") throw new HttpError(403, "FORBIDDEN", "Admins only")
   next()
 }
