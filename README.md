@@ -1,5 +1,10 @@
 # PhishLens — AI Phishing Detection Platform
 
+🌐 **Live demo (frontend):** [phishing-detection-platform-kappa.vercel.app](https://phishing-detection-platform-kappa.vercel.app)
+⚙️ **Live API (backend):** [phishlens-api-hmuj.onrender.com](https://phishlens-api-hmuj.onrender.com)
+
+> The API runs on Render's free tier, so the first request after a period of inactivity can take up to a minute while it wakes up.
+
 Check whether a URL, email or message is safe or phishing. Every scan runs
 rule-based checks (HTTPS, keywords, domain structure, look-alike tricks) and,
 for URLs, asks **VirusTotal** and **Google Safe Browsing**. You get a risk
