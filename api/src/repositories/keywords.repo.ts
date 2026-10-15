@@ -1,22 +1,15 @@
 import type { KeywordRule, SuspiciousKeyword } from '@phishlens/core'
-import { supabase } from '../lib/supabase.js'
+import { isObjectId } from '../lib/db.js'
+import { KeywordModel, type KeywordDoc } from '../models/keyword.model.js'
 
-// Reads and writes of `keywords`, the admin-managed list the analyzer uses.
+// Reads and writes of the admin-managed keyword list the analyzer uses.
 
-interface KeywordRow {
-  id: string
-  term: string
-  category: SuspiciousKeyword['category']
-  weight: number
-  created_at: string
-}
-
-const toKeyword = (r: KeywordRow): SuspiciousKeyword => ({
-  id: r.id,
-  term: r.term,
-  category: r.category,
-  weight: r.weight,
-  createdAt: r.created_at,
+const toKeyword = (d: KeywordDoc): SuspiciousKeyword => ({
+  id: d._id.toString(),
+  term: d.term,
+  category: d.category as SuspiciousKeyword['category'],
+  weight: d.weight,
+  createdAt: d.createdAt.toISOString(),
 })
 
 export class DuplicateKeywordError extends Error {
@@ -28,34 +21,33 @@ export class DuplicateKeywordError extends Error {
 
 export const keywordsRepo = {
   async list(): Promise<SuspiciousKeyword[]> {
-    const { data, error } = await supabase.from('keywords').select('*').order('created_at', { ascending: false })
-    if (error) throw error
-    return (data as KeywordRow[]).map(toKeyword)
+    const docs = await KeywordModel.find().sort({ createdAt: -1 }).lean<KeywordDoc[]>()
+    return docs.map(toKeyword)
   },
 
   async add(rule: KeywordRule): Promise<SuspiciousKeyword> {
-    const { data, error } = await supabase.from('keywords').insert(rule).select('*').single()
-    if (error) {
-      if (error.code === '23505') throw new DuplicateKeywordError()
-      throw error
+    try {
+      const doc = await KeywordModel.create(rule)
+      return toKeyword(doc.toObject() as KeywordDoc)
+    } catch (err) {
+      if ((err as { code?: number }).code === 11000) throw new DuplicateKeywordError()
+      throw err
     }
-    return toKeyword(data as KeywordRow)
   },
 
   /** Returns false when there was no such keyword. */
   async remove(id: string): Promise<boolean> {
-    const { error, count } = await supabase.from('keywords').delete({ count: 'exact' }).eq('id', id)
-    if (error) throw error
-    return (count ?? 0) > 0
+    if (!isObjectId(id)) return false
+    return (await KeywordModel.deleteOne({ _id: id })).deletedCount > 0
   },
 
   /** Inserts any of `rules` not already present; returns how many were added. */
   async seed(rules: KeywordRule[]): Promise<number> {
-    const { data, error } = await supabase
-      .from('keywords')
-      .upsert(rules, { onConflict: 'term,category', ignoreDuplicates: true })
-      .select('id')
-    if (error) throw error
-    return data.length
+    const result = await KeywordModel.bulkWrite(
+      rules.map((rule) => ({
+        updateOne: { filter: { term: rule.term, category: rule.category }, update: { $setOnInsert: rule }, upsert: true },
+      })),
+    )
+    return result.upsertedCount
   },
 }

@@ -1,34 +1,8 @@
+import { Types } from 'mongoose'
 import type { CheckResult, ReputationResult, RiskLevel, ScanReport, ScanResult, ScanType } from '@phishlens/core'
-import { supabase } from '../lib/supabase.js'
+import { ScanModel, type ScanDoc } from '../models/scan.model.js'
 
-// Reads and writes of `scan_history`, mapped to the shared ScanResult shape.
-
-export interface ScanRow {
-  id: string
-  user_id: string
-  scan_type: ScanType
-  content: string
-  risk_level: RiskLevel
-  risk_score: number
-  threat_status: string
-  recommendation: string
-  result: { checks: CheckResult[]; reputation: ReputationResult[] }
-  created_at: string
-}
-
-export const toScan = (r: ScanRow): ScanResult => ({
-  id: r.id,
-  type: r.scan_type,
-  content: r.content,
-  riskLevel: r.risk_level,
-  riskScore: r.risk_score,
-  threatStatus: r.threat_status,
-  recommendation: r.recommendation,
-  checks: r.result.checks,
-  reputation: r.result.reputation,
-  createdAt: r.created_at,
-  userId: r.user_id,
-})
+// Reads and writes of scans, mapped to the shared ScanResult shape.
 
 export type UnsavedScan = Omit<ScanResult, 'id' | 'createdAt' | 'userId'>
 export type ReportFields = Pick<ScanReport, 'category' | 'title' | 'details'>
@@ -36,78 +10,64 @@ export type LevelCounts = Record<RiskLevel, number> & { total: number }
 
 const HISTORY_LIMIT = 500
 
-async function count(build: (q: ReturnType<typeof base>) => ReturnType<typeof base>): Promise<number> {
-  const { count: n, error } = await build(base())
-  if (error) throw error
-  return n ?? 0
-}
-const base = () => supabase.from('scan_history').select('id', { count: 'exact', head: true })
+export const toScan = (d: ScanDoc): ScanResult => ({
+  id: d._id.toString(),
+  type: d.type as ScanType,
+  content: d.content,
+  riskLevel: d.riskLevel as RiskLevel,
+  riskScore: d.riskScore,
+  threatStatus: d.threatStatus,
+  recommendation: d.recommendation,
+  checks: d.checks as CheckResult[],
+  reputation: d.reputation as ReputationResult[],
+  createdAt: d.createdAt.toISOString(),
+  userId: d.userId.toString(),
+})
+
+const scope = (userId?: string) => (userId ? { userId: new Types.ObjectId(userId) } : {})
 
 export const scansRepo = {
-  /** Saves a scan and, when flagged, its report — atomically (see record_scan in infra/schema.sql). */
+  /** Saves a scan and, when flagged, its report: one document, so one atomic write. */
   async record(userId: string, scan: UnsavedScan, report: ReportFields | null): Promise<ScanResult> {
-    const { data, error } = await supabase.rpc('record_scan', {
-      p_scan: {
-        user_id: userId,
-        scan_type: scan.type,
-        content: scan.content,
-        risk_level: scan.riskLevel,
-        risk_score: scan.riskScore,
-        threat_status: scan.threatStatus,
-        recommendation: scan.recommendation,
-        result: { checks: scan.checks, reputation: scan.reputation },
-      },
-      p_report: report,
-    })
-    if (error) throw error
-    return toScan(data as ScanRow)
+    const doc = await ScanModel.create({ ...scan, userId: new Types.ObjectId(userId), report })
+    return toScan(doc.toObject() as ScanDoc)
   },
 
   /** A user's scans, newest first. */
   async listByUser(userId: string): Promise<ScanResult[]> {
-    const { data, error } = await supabase
-      .from('scan_history')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(HISTORY_LIMIT)
-    if (error) throw error
-    return (data as ScanRow[]).map(toScan)
+    const docs = await ScanModel.find(scope(userId)).sort({ createdAt: -1 }).limit(HISTORY_LIMIT).lean<ScanDoc[]>()
+    return docs.map(toScan)
   },
 
   /** Platform-wide detection log, newest first. */
   async listRecent(limit = HISTORY_LIMIT): Promise<ScanResult[]> {
-    const { data, error } = await supabase
-      .from('scan_history')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(limit)
-    if (error) throw error
-    return (data as ScanRow[]).map(toScan)
+    const docs = await ScanModel.find().sort({ createdAt: -1 }).limit(limit).lean<ScanDoc[]>()
+    return docs.map(toScan)
   },
 
   /** Scans per risk level, for one user or (without a user) the whole platform. */
   async levelCounts(userId?: string): Promise<LevelCounts> {
-    const scoped = (q: ReturnType<typeof base>) => (userId ? q.eq('user_id', userId) : q)
-    const [total, low, medium, high] = await Promise.all([
-      count(scoped),
-      count((q) => scoped(q).eq('risk_level', 'low')),
-      count((q) => scoped(q).eq('risk_level', 'medium')),
-      count((q) => scoped(q).eq('risk_level', 'high')),
+    const rows: { _id: RiskLevel; n: number }[] = await ScanModel.aggregate([
+      { $match: scope(userId) },
+      { $group: { _id: '$riskLevel', n: { $sum: 1 } } },
     ])
-    return { total, low, medium, high }
+    const counts: LevelCounts = { total: 0, low: 0, medium: 0, high: 0 }
+    for (const { _id, n } of rows) {
+      counts[_id] = n
+      counts.total += n
+    }
+    return counts
   },
 
   /** Risk level and time of every scan since `since` (for daily charts). */
   async levelsSince(since: Date, userId?: string): Promise<Pick<ScanResult, 'riskLevel' | 'createdAt'>[]> {
-    let q = supabase.from('scan_history').select('risk_level, created_at').gte('created_at', since.toISOString())
-    if (userId) q = q.eq('user_id', userId)
-    const { data, error } = await q
-    if (error) throw error
-    return (data as Pick<ScanRow, 'risk_level' | 'created_at'>[]).map((r) => ({ riskLevel: r.risk_level, createdAt: r.created_at }))
+    const docs = await ScanModel.find({ ...scope(userId), createdAt: { $gte: since } }, { riskLevel: 1, createdAt: 1 }).lean<
+      Pick<ScanDoc, 'riskLevel' | 'createdAt'>[]
+    >()
+    return docs.map((d) => ({ riskLevel: d.riskLevel as RiskLevel, createdAt: d.createdAt.toISOString() }))
   },
 
   async countSince(since: Date): Promise<number> {
-    return count((q) => q.gte('created_at', since.toISOString()))
+    return ScanModel.countDocuments({ createdAt: { $gte: since } })
   },
 }

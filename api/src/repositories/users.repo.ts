@@ -1,10 +1,13 @@
+import { Types } from 'mongoose'
 import type { AdminUser, Role } from '@phishlens/core'
-import { supabase } from '../lib/supabase.js'
+import { isObjectId } from '../lib/db.js'
+import { ScanModel } from '../models/scan.model.js'
+import { UserModel, type UserDoc } from '../models/user.model.js'
 
-// All reads and writes of the `users` table go through here, so controllers
-// stay free of query details and tests can swap this module for an in-memory
-// fake. Not-found returns null; any other database error throws and reaches
-// the error handler as a 500.
+// All reads and writes of users go through here, so controllers stay free of
+// query details and tests can swap this module for an in-memory fake.
+// Not-found returns null; any other database error throws and reaches the
+// error handler as a 500.
 
 export type UserStatus = AdminUser['status']
 
@@ -18,8 +21,8 @@ export interface PublicUser {
 }
 
 export interface UserWithSecret extends PublicUser {
-  password_hash: string | null
-  google_id: string | null
+  passwordHash: string | null
+  googleId: string | null
 }
 
 export interface NewUser {
@@ -30,7 +33,7 @@ export interface NewUser {
   imageUrl?: string | null
 }
 
-// undefined fields are left unchanged (JSON serialization drops them)
+// undefined fields are left unchanged
 export type UserPatch = { role?: Role | undefined; status?: UserStatus | undefined }
 
 export class DuplicateEmailError extends Error {
@@ -40,114 +43,97 @@ export class DuplicateEmailError extends Error {
   }
 }
 
-const PUBLIC_COLUMNS = 'id, email, name, role, status'
-const UNIQUE_VIOLATION = '23505'
+const DUPLICATE_KEY = 11000
 
-interface OverviewRow {
-  id: string
-  email: string
-  name: string
-  role: Role
-  status: UserStatus
-  created_at: string
-  scans: number
-  last_active: string
+const toPublic = (d: UserDoc): PublicUser => ({
+  id: d._id.toString(),
+  email: d.email,
+  name: d.name,
+  role: d.role as Role,
+  status: d.status as UserStatus,
+})
+
+const toSecret = (d: UserDoc): UserWithSecret => ({
+  ...toPublic(d),
+  passwordHash: d.passwordHash ?? null,
+  googleId: d.googleId ?? null,
+})
+
+/** Scan count and latest scan time per user id (all users, or just `userIds`). */
+async function activityByUser(userIds?: string[]): Promise<Map<string, { scans: number; last: Date }>> {
+  const match = userIds ? [{ $match: { userId: { $in: userIds.map((id) => new Types.ObjectId(id)) } } }] : []
+  const rows: { _id: Types.ObjectId; scans: number; last: Date }[] = await ScanModel.aggregate([
+    ...match,
+    { $group: { _id: '$userId', scans: { $sum: 1 }, last: { $max: '$createdAt' } } },
+  ])
+  return new Map(rows.map((r) => [r._id.toString(), { scans: r.scans, last: r.last }]))
 }
 
-const toAdminUser = (r: OverviewRow): AdminUser => ({
-  id: r.id,
-  email: r.email,
-  name: r.name,
-  role: r.role,
-  status: r.status,
-  scans: r.scans,
-  lastActive: r.last_active,
-  createdAt: r.created_at,
-})
+function toAdminUser(d: UserDoc, activity?: { scans: number; last: Date }): AdminUser {
+  return {
+    ...toPublic(d),
+    scans: activity?.scans ?? 0,
+    lastActive: (activity?.last ?? d.createdAt).toISOString(),
+    createdAt: d.createdAt.toISOString(),
+  }
+}
 
 export const usersRepo = {
   async findById(id: string): Promise<PublicUser | null> {
-    const { data, error } = await supabase.from('users').select(PUBLIC_COLUMNS).eq('id', id).maybeSingle()
-    if (error) throw error
-    return data as PublicUser | null
+    // ids come from tokens; an old or forged one is simply not found
+    if (!isObjectId(id)) return null
+    const doc = await UserModel.findById(id).lean<UserDoc>()
+    return doc ? toPublic(doc) : null
   },
 
   async findByEmail(email: string): Promise<UserWithSecret | null> {
-    const { data, error } = await supabase
-      .from('users')
-      .select(`${PUBLIC_COLUMNS}, password_hash, google_id`)
-      .eq('email', email)
-      .maybeSingle()
-    if (error) throw error
-    return data as UserWithSecret | null
+    const doc = await UserModel.findOne({ email: email.toLowerCase() }).lean<UserDoc>()
+    return doc ? toSecret(doc) : null
   },
 
   async findByGoogleId(googleId: string): Promise<PublicUser | null> {
-    const { data, error } = await supabase
-      .from('users')
-      .select(PUBLIC_COLUMNS)
-      .eq('google_id', googleId)
-      .maybeSingle()
-    if (error) throw error
-    return data as PublicUser | null
+    const doc = await UserModel.findOne({ googleId }).lean<UserDoc>()
+    return doc ? toPublic(doc) : null
   },
 
   async create(input: NewUser): Promise<PublicUser> {
-    const { data, error } = await supabase
-      .from('users')
-      .insert({
+    try {
+      const doc = await UserModel.create({
         email: input.email,
         name: input.name,
-        password_hash: input.passwordHash ?? null,
-        google_id: input.googleId ?? null,
-        image_url: input.imageUrl ?? null,
+        passwordHash: input.passwordHash ?? null,
+        googleId: input.googleId ?? null,
+        imageUrl: input.imageUrl ?? null,
       })
-      .select(PUBLIC_COLUMNS)
-      .single()
-    if (error) {
-      if (error.code === UNIQUE_VIOLATION) throw new DuplicateEmailError()
-      throw error
+      return toPublic(doc.toObject() as UserDoc)
+    } catch (err) {
+      if ((err as { code?: number }).code === DUPLICATE_KEY) throw new DuplicateEmailError()
+      throw err
     }
-    return data as PublicUser
   },
 
   async linkGoogle(id: string, googleId: string, imageUrl: string | null): Promise<PublicUser> {
-    const { data, error } = await supabase
-      .from('users')
-      .update({ google_id: googleId, image_url: imageUrl })
-      .eq('id', id)
-      .select(PUBLIC_COLUMNS)
-      .single()
-    if (error) throw error
-    return data as PublicUser
+    const doc = await UserModel.findByIdAndUpdate(id, { googleId, imageUrl }, { new: true }).lean<UserDoc>()
+    if (!doc) throw new Error(`user ${id} disappeared while linking Google`)
+    return toPublic(doc)
   },
 
   /** Every account with its scan count and last activity, newest first. */
   async listOverview(): Promise<AdminUser[]> {
-    const { data, error } = await supabase
-      .from('admin_user_overview')
-      .select('*')
-      .order('created_at', { ascending: false })
-    if (error) throw error
-    return (data as OverviewRow[]).map(toAdminUser)
+    const [docs, activity] = await Promise.all([UserModel.find().sort({ createdAt: -1 }).lean<UserDoc[]>(), activityByUser()])
+    return docs.map((d) => toAdminUser(d, activity.get(d._id.toString())))
   },
 
   async update(id: string, patch: UserPatch): Promise<AdminUser | null> {
-    const { error, count } = await supabase.from('users').update(patch, { count: 'exact' }).eq('id', id)
-    if (error) throw error
-    if (!count) return null
-    const { data, error: readError } = await supabase.from('admin_user_overview').select('*').eq('id', id).single()
-    if (readError) throw readError
-    return toAdminUser(data as OverviewRow)
+    if (!isObjectId(id)) return null
+    const changes = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined))
+    const doc = await UserModel.findByIdAndUpdate(id, changes, { new: true, runValidators: true }).lean<UserDoc>()
+    if (!doc) return null
+    return toAdminUser(doc, (await activityByUser([id])).get(id))
   },
 
   async counts(): Promise<{ total: number; active: number }> {
-    const [all, active] = await Promise.all([
-      supabase.from('users').select('id', { count: 'exact', head: true }),
-      supabase.from('users').select('id', { count: 'exact', head: true }).eq('status', 'active'),
-    ])
-    if (all.error) throw all.error
-    if (active.error) throw active.error
-    return { total: all.count ?? 0, active: active.count ?? 0 }
+    const [total, active] = await Promise.all([UserModel.countDocuments(), UserModel.countDocuments({ status: 'active' })])
+    return { total, active }
   },
 }

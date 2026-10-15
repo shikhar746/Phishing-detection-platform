@@ -44,9 +44,9 @@ export const loginController = async (req: Request, res: Response) => {
     const data = parse(loginSchema, req.body)
     const user = await usersRepo.findByEmail(data.email)
 
-    // an account created through Google has no password_hash — there is nothing
+    // an account created through Google has no passwordHash — there is nothing
     // to compare against, and bcrypt throws on a null hash
-    const ok = user?.password_hash ? await bcrypt.compare(data.password, user.password_hash) : false
+    const ok = user?.passwordHash ? await bcrypt.compare(data.password, user.passwordHash) : false
     if (!user || !ok) throw new HttpError(401, "INVALID_CREDENTIALS", "Invalid email or password")
 
     // checked after the password, so suspension isn't revealed to guessers
@@ -80,7 +80,7 @@ export const googleAuthController = async (req: Request, res: Response) => {
         // Already linked to a different Google identity: the address now
         // belongs to someone else (e.g. a reassigned Gmail). Overwriting the
         // link would hand them this account.
-        if (byEmail.google_id && byEmail.google_id !== profile.googleId) {
+        if (byEmail.googleId && byEmail.googleId !== profile.googleId) {
             throw new HttpError(409, "GOOGLE_ACCOUNT_MISMATCH", "This email is linked to a different Google account. Sign in with your password instead.")
         }
         assertActive(byEmail)
@@ -89,7 +89,7 @@ export const googleAuthController = async (req: Request, res: Response) => {
         return res.status(200).json({ user: linked })
     }
 
-    // 3. brand new account — no password_hash, Google is the only way in
+    // 3. brand new account — no passwordHash, Google is the only way in
     const created = await usersRepo.create({
         email: profile.email,
         name: profile.name,

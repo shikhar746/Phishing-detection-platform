@@ -1,7 +1,8 @@
 import { KEYWORD_CATEGORIES, normalizeKeywordTerm } from '@phishlens/core'
 import { z } from 'zod'
+import { isObjectId } from '../lib/db.js'
 
-export const idParam = z.object({ id: z.uuid({ message: 'Invalid id' }) })
+export const idParam = z.object({ id: z.string().refine(isObjectId, 'Invalid id') })
 
 export const userPatchSchema = z
   .object({
