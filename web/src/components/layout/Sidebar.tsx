@@ -3,7 +3,6 @@
 import { LayoutGroup, motion } from "framer-motion";
 import { LogIn, LogOut, ShieldCheck } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { ButtonLink } from "@/components/ui/Button";
 import { Logo } from "@/components/ui/Logo";
 import { useAuth } from "@/context/AuthProvider";
@@ -71,7 +70,6 @@ export function Sidebar({ id, pathname, onNavigate }: { id: string; pathname: st
 }
 
 function AccountBox() {
-  const router = useRouter();
   const { user, logout } = useAuth();
   if (!user) return null;
   return (
@@ -85,10 +83,7 @@ function AccountBox() {
       </div>
       <button
         type="button"
-        onClick={async () => {
-          await logout();
-          router.push("/");
-        }}
+        onClick={() => void logout()}
         className="grid size-9 place-items-center rounded-lg text-on-dark-muted hover:bg-white/10 hover:text-surface"
         aria-label="Sign out"
       >

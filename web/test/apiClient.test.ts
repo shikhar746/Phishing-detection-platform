@@ -62,6 +62,28 @@ describe("apiFetch", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("refreshes an expired session on page load (GET /api/auth/me)", async () => {
+    fetchMock
+      .mockResolvedValueOnce(json(401, { error: { code: "INVALID_TOKEN" } }))
+      .mockResolvedValueOnce(json(200, { user: {} }))
+      .mockResolvedValueOnce(json(200, { user: { id: "u1", email: "a@example.com", name: "A", role: "user" } }));
+    await expect(authService.me()).resolves.toMatchObject({ id: "u1" });
+    expect(fetchMock.mock.calls.map((c) => c[0])).toEqual([
+      "http://api.test/api/auth/me",
+      "http://api.test/api/auth/refresh",
+      "http://api.test/api/auth/me",
+    ]);
+  });
+
+  it("only sends a JSON content type when there is a body (no CORS preflight for GETs)", async () => {
+    fetchMock.mockImplementation(async () => json(200, {}));
+    await api.get("/api/scans");
+    await api.post("/api/auth/logout");
+    await api.post("/api/scans/url", { url: "https://example.com" });
+    const headers = fetchMock.mock.calls.map(([, init]) => (init?.headers as Record<string, string> | undefined)?.["Content-Type"]);
+    expect(headers).toEqual([undefined, undefined, "application/json"]);
+  });
+
   it("never tries to refresh for auth endpoints", async () => {
     fetchMock.mockResolvedValueOnce(json(401, { error: { code: "INVALID_CREDENTIALS", message: "Invalid email or password" } }));
     await expect(api.post("/api/auth/login", {})).rejects.toMatchObject({ code: "INVALID_CREDENTIALS" });

@@ -49,9 +49,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       login: signIn((input: LoginInput) => authService.login(input)),
       register: signIn((input: RegisterInput) => authService.register(input)),
       loginWithGoogle: signIn((credential: string) => authService.google(credential)),
+      // A full navigation home, rather than clearing the session in place:
+      // clearing it while a protected page is mounted would make that page's
+      // auth gate race this navigation with a redirect to /login, and a
+      // reload also drops any signed-in data still held in memory.
       logout: async () => {
         await authService.logout().catch(() => undefined);
-        setSession({ user: null, loading: false });
+        // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- deliberate full reload, see above
+        window.location.assign("/");
       },
     };
   }, []);
