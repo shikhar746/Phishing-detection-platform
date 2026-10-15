@@ -16,7 +16,7 @@ http://secure-paypal-login-free.com  →  HIGH · 94% · Suspicious Website · A
 packages/core   @phishlens/core — shared domain model: types, the rule engine,
                 validation, stats and report building. Used by both apps.
 api/            Express 5 + TypeScript REST API (auth, scans, reports, admin),
-                Supabase Postgres, JWT cookies, Google sign-in.
+                MongoDB (Mongoose), JWT cookies, Google sign-in.
 web/            Next.js 16 app (landing, scanner, dashboard, reports, admin).
                 Proxies /api/* to the API; also runs fully on mock data.
 render.yaml     Render blueprint for the API.
@@ -27,7 +27,7 @@ apps import the same analysis engine, so the API and the browser can never
 score a link differently.
 
 ```
-Browser ──► web (Next.js) ──/api/* proxy──► api (Express) ──► Supabase Postgres
+Browser ──► web (Next.js) ──/api/* proxy──► api (Express) ──► MongoDB
                                                └──► VirusTotal, Google Safe Browsing
 ```
 
@@ -46,10 +46,12 @@ password; addresses starting with `admin` get the admin dashboard.
 
 ## Full setup (real backend)
 
-1. **Database.** Create a [Supabase](https://supabase.com) project and run
-   [`api/infra/schema.sql`](api/infra/schema.sql) in its SQL editor.
-2. **API config.** `cp api/.env.example api/.env` and fill in the Supabase URL
-   and service-role key, two random JWT secrets, and optionally the Google,
+1. **Database.** Either run a local MongoDB with `npm run db:local` (no
+   install needed; data is kept in `api/.mongo-data`), or create a free
+   [MongoDB Atlas](https://www.mongodb.com/atlas) cluster and copy its
+   connection string. Collections and indexes are created automatically.
+2. **API config.** `cp api/.env.example api/.env` and set `MONGODB_URI`,
+   two random JWT secrets, and optionally the Google,
    VirusTotal and Safe Browsing keys (see the comments in the file).
 3. **Seed keywords:** `npm run seed`
 4. **Web config.** In `web/.env.local` set `NEXT_PUBLIC_USE_MOCKS=false`.
@@ -63,6 +65,9 @@ password; addresses starting with `admin` get the admin dashboard.
 6. Register in the app, then make yourself an admin:
    `npm run seed -- --admin you@example.com`
 
+If a `mongodb+srv://` URI fails locally with `querySrv ECONNREFUSED` (some
+VPN / Cloudflare WARP setups), set `DNS_SERVERS=1.1.1.1,8.8.8.8` in `api/.env`.
+
 Without VirusTotal / Safe Browsing keys, scans still work and say the services
 are not configured; the rule-based checks decide the score on their own.
 
@@ -71,6 +76,7 @@ are not configured; the rule-based checks decide the score on their own.
 | Command | What it does |
 |---|---|
 | `npm run dev:web` / `npm run dev:api` | Run one app in watch mode |
+| `npm run db:local` | Run a local MongoDB on port 27017 (no install needed) |
 | `npm test` | Core, API and web test suites |
 | `npm run typecheck` | Type-check everything |
 | `npm run build` | Build core, API and web |
@@ -79,7 +85,7 @@ are not configured; the rule-based checks decide the score on their own.
 ## Deploying
 
 **API → Render.** New Blueprint from this repo; Render reads `render.yaml`.
-Fill in the `sync: false` variables (Supabase, Google, VirusTotal, Safe
+Fill in the `sync: false` variables (MongoDB, Google, VirusTotal, Safe
 Browsing). JWT secrets are generated for you.
 
 **Web → Vercel.** Import the repo with **Root Directory = `web`** (Vercel
@@ -96,7 +102,8 @@ Vercel domain and the auth cookies are first-party — no third-party-cookie
 problems in Safari or Chrome. Add the Vercel domain to the Google OAuth
 client's **Authorized JavaScript origins**.
 
-`TRUST_PROXY=2` in `render.yaml` assumes exactly that chain (Vercel proxy →
+On Atlas, allow Render under **Network Access** (Render's outbound IPs, or
+`0.0.0.0/0`). `TRUST_PROXY=2` in `render.yaml` assumes exactly that chain (Vercel proxy →
 Render load balancer → API). If you call the API directly instead, use `1`.
 
 ## More detail

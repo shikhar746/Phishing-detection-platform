@@ -2,12 +2,12 @@
 
 Express 5 + TypeScript REST API. Auth uses httpOnly JWT cookies (short-lived
 access token + rotating refresh token), email/password or Google sign-in.
-Data lives in Supabase Postgres. Scoring comes from `@phishlens/core`
+Data lives in MongoDB (Mongoose). Scoring comes from `@phishlens/core`
 (shared with the web app), with VirusTotal and Google Safe Browsing as
 reputation inputs.
 
 Setup and deployment are in the [root README](../README.md). From the repo
-root: `npm run dev:api`, `npm test -w api`, `npm run seed`.
+root: `npm run db:local`, `npm run dev:api`, `npm test -w api`, `npm run seed`.
 
 ## Layout
 
@@ -20,12 +20,13 @@ src/
   services/scanner.ts      scan pipeline: rules + reputation → save
   services/keywords.ts     cached admin keyword list
   services/reputation/     VirusTotal v3 + Safe Browsing v4 clients
-  repositories/            all Supabase access (users, scans, reports, keywords)
+  models/                  Mongoose schemas: users, scans (with embedded reports), keywords
+  repositories/            all database access (users, scans, reports, keywords)
   middlewares/             auth (requireAuth / optionalAuth / requireAdmin),
                            rate limits, the single error handler
   schemas/                 zod request schemas (scan input reuses core's validators)
   scripts/seed.ts          keyword seeding, admin promotion
-infra/schema.sql           tables, record_scan() and the admin_user_overview view
+scripts/local-mongo.ts     `npm run db:local`: a local MongoDB without installing one
 ```
 
 ## Endpoints
@@ -61,8 +62,8 @@ Every error uses one envelope, written only by the error handler:
    lookups run **in parallel**. Each lookup has a 6 s timeout; a failure or a
    missing key becomes an "unavailable" result instead of failing the scan.
 3. `@phishlens/core` scores rules + reputation into a verdict.
-4. For signed-in users, `record_scan()` saves the scan and (when medium/high)
-   its report row in **one transaction**.
+4. For signed-in users, the scan is saved with (when medium/high) its report
+   embedded in the same document, so both land in **one atomic write**.
 
 VirusTotal URLs it has never seen are submitted for analysis and reported as
 "not yet known" — that is not treated as clean. The free VirusTotal tier
@@ -83,8 +84,9 @@ allows 4 lookups a minute; `SCAN_RATE_LIMIT_MAX` limits scans per user.
 - **Rate limits:** failed sign-ins per IP; scans per user (or per IP when
   anonymous). `TRUST_PROXY` must equal the real number of proxies in front of
   the API, or clients could forge the IP the limiter sees.
-- **Database:** row-level security is on for every table with no public
-  policies; only the server's service-role key can read or write.
+- **Database:** only the API holds the connection string; unique indexes
+  enforce one account per email, one account per Google id and no duplicate
+  keywords, even under concurrent requests.
 
 ## Google sign-in setup
 
@@ -100,7 +102,9 @@ allows 4 lookups a minute; `SCAN_RATE_LIMIT_MAX` limits scans per user.
 
 Vitest + Supertest drive the real Express app. `test/setup.ts` swaps every
 repository for one in-memory database (`test/fakes/db.ts`) and stubs the
-reputation services, so tests need no network, Supabase or `.env`.
+reputation services, so route tests need no database, network or `.env`.
+The `*.mongo.test.ts` suites run the real repositories and the whole app
+against a real MongoDB (mongodb-memory-server, downloaded on first run).
 
 - `auth.routes.test.ts` — app wiring, register/login/me/refresh/logout, suspension, error handling
 - `google.routes.test.ts`, `google.lib.test.ts` — Google sign-in and ID-token verification
