@@ -12,6 +12,16 @@ import { HttpError, parse } from "../lib/httpError.js";
 
 const notLoggedIn = () => new HttpError(401, "UNAUTHENTICATED", "Not logged in")
 
+/** Suspended accounts can't start or keep a session. */
+function assertActive<U extends Pick<PublicUser, "status">>(user: U): U {
+    if (user.status !== "active") {
+        throw new HttpError(403, "ACCOUNT_SUSPENDED", "This account has been suspended. Contact an administrator.")
+    }
+    return user
+}
+
+const publicFields = ({ id, email, name, role, status }: PublicUser): PublicUser => ({ id, email, name, role, status })
+
 function startSession(res: Response, user: PublicUser) {
     setAuthCookies(res, signAccessToken(user.id), signRefreshToken(user.id))
 }
@@ -39,7 +49,8 @@ export const loginController = async (req: Request, res: Response) => {
     const ok = user?.password_hash ? await bcrypt.compare(data.password, user.password_hash) : false
     if (!user || !ok) throw new HttpError(401, "INVALID_CREDENTIALS", "Invalid email or password")
 
-    const publicUser: PublicUser = { id: user.id, email: user.email, name: user.name, role: user.role }
+    // checked after the password, so suspension isn't revealed to guessers
+    const publicUser = publicFields(assertActive(user))
     startSession(res, publicUser)
     res.status(200).json({ user: publicUser })
 }
@@ -57,7 +68,7 @@ export const googleAuthController = async (req: Request, res: Response) => {
     //    because a Google address can be reassigned but the sub never is
     const byGoogleId = await usersRepo.findByGoogleId(profile.googleId)
     if (byGoogleId) {
-        startSession(res, byGoogleId)
+        startSession(res, assertActive(byGoogleId))
         return res.status(200).json({ user: byGoogleId })
     }
 
@@ -66,6 +77,13 @@ export const googleAuthController = async (req: Request, res: Response) => {
     //    account. Safe because we only get here for a Google-verified address.
     const byEmail = await usersRepo.findByEmail(profile.email)
     if (byEmail) {
+        // Already linked to a different Google identity: the address now
+        // belongs to someone else (e.g. a reassigned Gmail). Overwriting the
+        // link would hand them this account.
+        if (byEmail.google_id && byEmail.google_id !== profile.googleId) {
+            throw new HttpError(409, "GOOGLE_ACCOUNT_MISMATCH", "This email is linked to a different Google account. Sign in with your password instead.")
+        }
+        assertActive(byEmail)
         const linked = await usersRepo.linkGoogle(byEmail.id, profile.googleId, profile.imageUrl)
         startSession(res, linked)
         return res.status(200).json({ user: linked })
@@ -85,7 +103,7 @@ export const googleAuthController = async (req: Request, res: Response) => {
 export const meController = async (req: Request, res: Response) => {
     const user = req.userId ? await usersRepo.findById(req.userId) : null
     if (!user) throw notLoggedIn()
-    res.status(200).json({ user })
+    res.status(200).json({ user: assertActive(user) })
 }
 
 export const refreshController = async (req: Request, res: Response) => {
@@ -99,7 +117,7 @@ export const refreshController = async (req: Request, res: Response) => {
     if (!user) throw notLoggedIn()
 
     // rotate both tokens on every refresh
-    startSession(res, user)
+    startSession(res, assertActive(user))
     res.status(200).json({ user })
 }
 

@@ -1,6 +1,6 @@
 import express from "express"
 import { registerController, loginController, googleAuthController, refreshController, logoutController, meController } from "../controllers/auth.controller.js"
-import { requireAuth } from "../middlewares/requireAuth.js"
+import { requireAuth } from "../middlewares/auth.js"
 import { authLimiter } from "../middlewares/rateLimit.js"
 
 const router = express.Router()

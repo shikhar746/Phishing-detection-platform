@@ -1,3 +1,4 @@
+import type { AdminUser, Role } from '@phishlens/core'
 import { supabase } from '../lib/supabase.js'
 
 // All reads and writes of the `users` table go through here, so controllers
@@ -5,13 +6,15 @@ import { supabase } from '../lib/supabase.js'
 // fake. Not-found returns null; any other database error throws and reaches
 // the error handler as a 500.
 
-export type Role = 'user' | 'admin'
+export type UserStatus = AdminUser['status']
 
+/** The account as the API returns it; never includes credentials. */
 export interface PublicUser {
   id: string
   email: string
   name: string
   role: Role
+  status: UserStatus
 }
 
 export interface UserWithSecret extends PublicUser {
@@ -27,6 +30,9 @@ export interface NewUser {
   imageUrl?: string | null
 }
 
+// undefined fields are left unchanged (JSON serialization drops them)
+export type UserPatch = { role?: Role | undefined; status?: UserStatus | undefined }
+
 export class DuplicateEmailError extends Error {
   constructor() {
     super('Email already registered')
@@ -34,8 +40,30 @@ export class DuplicateEmailError extends Error {
   }
 }
 
-const PUBLIC_COLUMNS = 'id, email, name, role'
+const PUBLIC_COLUMNS = 'id, email, name, role, status'
 const UNIQUE_VIOLATION = '23505'
+
+interface OverviewRow {
+  id: string
+  email: string
+  name: string
+  role: Role
+  status: UserStatus
+  created_at: string
+  scans: number
+  last_active: string
+}
+
+const toAdminUser = (r: OverviewRow): AdminUser => ({
+  id: r.id,
+  email: r.email,
+  name: r.name,
+  role: r.role,
+  status: r.status,
+  scans: r.scans,
+  lastActive: r.last_active,
+  createdAt: r.created_at,
+})
 
 export const usersRepo = {
   async findById(id: string): Promise<PublicUser | null> {
@@ -92,5 +120,34 @@ export const usersRepo = {
       .single()
     if (error) throw error
     return data as PublicUser
+  },
+
+  /** Every account with its scan count and last activity, newest first. */
+  async listOverview(): Promise<AdminUser[]> {
+    const { data, error } = await supabase
+      .from('admin_user_overview')
+      .select('*')
+      .order('created_at', { ascending: false })
+    if (error) throw error
+    return (data as OverviewRow[]).map(toAdminUser)
+  },
+
+  async update(id: string, patch: UserPatch): Promise<AdminUser | null> {
+    const { error, count } = await supabase.from('users').update(patch, { count: 'exact' }).eq('id', id)
+    if (error) throw error
+    if (!count) return null
+    const { data, error: readError } = await supabase.from('admin_user_overview').select('*').eq('id', id).single()
+    if (readError) throw readError
+    return toAdminUser(data as OverviewRow)
+  },
+
+  async counts(): Promise<{ total: number; active: number }> {
+    const [all, active] = await Promise.all([
+      supabase.from('users').select('id', { count: 'exact', head: true }),
+      supabase.from('users').select('id', { count: 'exact', head: true }).eq('status', 'active'),
+    ])
+    if (all.error) throw all.error
+    if (active.error) throw active.error
+    return { total: all.count ?? 0, active: active.count ?? 0 }
   },
 }

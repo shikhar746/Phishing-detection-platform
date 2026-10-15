@@ -58,6 +58,14 @@ function optionalDuration(name: string, fallback: string): { raw: string; ms: nu
     return { raw, ms: Number(amount) * DURATION_UNIT_MS[unit]! }
 }
 
+function optionalEnum<T extends string>(name: string, allowed: readonly T[], fallback: T): T {
+    const v = process.env[name]?.trim()
+    if (!v) return fallback
+    if (!(allowed as readonly string[]).includes(v))
+        throw new Error(`Environment variable ${name} must be one of ${allowed.join(', ')}, got: ${v}`)
+    return v as T
+}
+
 // trailing slashes on a pasted dashboard value would turn every allowed origin
 // into one the browser never sends, so they are stripped here once
 function normalizeOrigin(origin: string): string {
@@ -72,13 +80,19 @@ export const env = {
         'http://localhost:5173',
         'http://localhost:3000',
     ]).map(normalizeOrigin),
+    // Number of reverse proxies in front of the API (Render's load balancer
+    // is 1). 0 means X-Forwarded-For is ignored; trusting it without a proxy
+    // would let clients pick their own IP and dodge rate limits.
+    TRUST_PROXY: optionalNumber('TRUST_PROXY', 0, { min: 0 }),
+    // "lax" when the web app proxies /api (same site, the default); "none"
+    // only if browsers call the API directly from another site.
+    COOKIE_SAMESITE: optionalEnum('COOKIE_SAMESITE', ['lax', 'strict', 'none'] as const, 'lax'),
     // auth 
     JWT_SECRET: required('JWT_SECRET'),
     REFRESH_SECRET: required('REFRESH_SECRET'),
     ACCESS_TOKEN_TTL: optionalDuration('ACCESS_TOKEN_TTL', '15m'),
     REFRESH_TOKEN_TTL: optionalDuration('REFRESH_TOKEN_TTL', '7d'),
     GOOGLE_CLIENT_ID: optionalString('GOOGLE_CLIENT_ID'),
-    GOOGLE_CLIENT_SECRET: optionalString('GOOGLE_CLIENT_SECRET'),
 
     // database (Supabase Postgres). The service-role key bypasses row-level
     // security, so it must only ever live on the server.
@@ -89,11 +103,12 @@ export const env = {
     VIRUSTOTAL_API_KEY: optionalString('VIRUSTOTAL_API_KEY'),
     GOOGLE_SAFE_BROWSING_API_KEY: optionalString('GOOGLE_SAFE_BROWSING_API_KEY'),
 
+    // failed sign-in attempts per window, per client IP
     RATE_LIMIT_WINDOW_MINUTES: optionalNumber('RATE_LIMIT_WINDOW_MINUTES', 15),
     RATE_LIMIT_MAX: optionalNumber('RATE_LIMIT_MAX', 10),
-
-    // uploads (multer buffers in memory)
-    MAX_FILE_SIZE_BYTES: optionalNumber('MAX_FILE_SIZE_BYTES', 52_428_800),
+    // scans per window, per signed-in user (or per IP when anonymous); keeps
+    // the free VirusTotal / Safe Browsing quotas from being burned through
+    SCAN_RATE_LIMIT_MAX: optionalNumber('SCAN_RATE_LIMIT_MAX', 30),
 } as const
 
 if (missing.length > 0) {

@@ -3,19 +3,22 @@ import cors from 'cors'
 import helmet from 'helmet'
 import cookieParser from 'cookie-parser'
 import { env } from './config/env.js'
-import authRoutes from './routes/auth.routes.js'
-import userRoutes from './routes/user.routes.js'
-import { errorHandler } from './middlewares/errorHandler.js'
 import { HttpError } from './lib/httpError.js'
+import { errorHandler } from './middlewares/errorHandler.js'
+import adminRoutes from './routes/admin.routes.js'
+import authRoutes from './routes/auth.routes.js'
+import reportsRoutes from './routes/reports.routes.js'
+import scansRoutes from './routes/scans.routes.js'
 
 const app = express()
 
-// behind Render / a reverse proxy, so rate limiting sees the real client IP
-app.set('trust proxy', 1)
+// Only trust X-Forwarded-For when there really is a proxy in front (see
+// TRUST_PROXY); otherwise clients could choose the IP the rate limiter sees.
+app.set('trust proxy', env.TRUST_PROXY)
 
 app.use(helmet())
-// the web app runs on a different origin and authenticates with cookies, so
-// CORS must name the allowed origins explicitly and allow credentials
+// The web app normally proxies /api so requests are same-origin; CORS covers
+// clients that call the API directly. Cookies need credentials enabled.
 app.use(
     cors({
         origin: env.CORS_ORIGIN,
@@ -30,7 +33,9 @@ app.get('/api/health', (_req, res) => {
 })
 
 app.use('/api/auth', authRoutes)
-app.use('/api/users', userRoutes)
+app.use('/api/scans', scansRoutes)
+app.use('/api/reports', reportsRoutes)
+app.use('/api/admin', adminRoutes)
 
 app.use(() => {
     throw new HttpError(404, 'NOT_FOUND', 'Route not found')

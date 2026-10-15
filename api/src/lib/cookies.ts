@@ -1,12 +1,11 @@
 import type { Response } from "express"
 import { env } from "../config/env.js"
 
-const isProd = env.NODE_ENV === 'production'
-
 const base = {
   httpOnly: true,
-  secure: isProd,
-  sameSite: (isProd ? 'none' : 'lax') as 'none' | 'lax',
+  // SameSite=None is only accepted by browsers on Secure cookies
+  secure: env.NODE_ENV === 'production' || env.COOKIE_SAMESITE === 'none',
+  sameSite: env.COOKIE_SAMESITE,
 }
 
 export function setAuthCookies(res: Response, accessToken: string, refreshToken: string) {
