@@ -164,3 +164,32 @@ describe("whole-word keyword matching", () => {
     expect(analyzeUrl("https://example.com/gift/the-card", keywords).checks.find((c) => c.id === "keywords")?.weight).toBe(0);
   });
 });
+
+describe("reputation floor", () => {
+  const clean = "https://docs.example-company.com/welcome";
+  const flagged = (source: "virustotal" | "safe-browsing") => [{ source, status: "flagged" as const, summary: "x" }];
+
+  it("rates a Safe Browsing match high even when the URL looks clean", () => {
+    expect(analyzeUrl(clean, DEFAULT_KEYWORDS).riskLevel).toBe("low");
+    const r = analyzeUrl(clean, DEFAULT_KEYWORDS, flagged("safe-browsing"));
+    expect(r.riskScore).toBe(85);
+    expect(r.riskLevel).toBe("high");
+    expect(r.recommendation).toBe("Avoid Visiting");
+  });
+
+  it("rates VirusTotal detections at least high", () => {
+    const r = analyzeUrl(clean, DEFAULT_KEYWORDS, flagged("virustotal"));
+    expect(r.riskLevel).toBe("high");
+    expect(r.riskScore).toBe(65);
+  });
+
+  it("never lowers a score that is already higher", () => {
+    expect(analyzeUrl("http://secure-paypal-login-free.com", DEFAULT_KEYWORDS, flagged("safe-browsing")).riskScore).toBe(85);
+    expect(analyzeUrl("http://secure-paypal-login-free.com", DEFAULT_KEYWORDS, [...flagged("safe-browsing"), ...flagged("virustotal")]).riskScore).toBe(94);
+  });
+
+  it("ignores clean and unavailable results", () => {
+    const r = analyzeUrl(clean, DEFAULT_KEYWORDS, [{ source: "safe-browsing", status: "unavailable", summary: "x" }]);
+    expect(r.riskLevel).toBe("low");
+  });
+});

@@ -59,10 +59,22 @@ const RECOMMENDATION: Record<ScanType, Record<RiskLevel, string>> = {
   email: { low: "Looks Safe to Read", medium: "Verify the Sender First", high: "Do Not Click or Reply" },
 };
 
+/**
+ * A reputation hit is evidence, not a hint: a URL Google lists as unsafe, or
+ * that security vendors flag, is high risk however clean the address looks.
+ * So a flagged result sets a minimum score instead of only adding points.
+ */
+const REPUTATION_FLOOR: Record<ReputationResult["source"], number> = {
+  virustotal: RISK_THRESHOLDS.high,
+  "safe-browsing": 85,
+};
+
 /** Sums rule and reputation weights (capped at 100) into the final verdict. */
 export function score(type: ScanType, ruleChecks: CheckResult[], reputation: ReputationResult[] = []): Analysis {
   const checks = [...ruleChecks, ...reputation.map(reputationCheck)];
-  const riskScore = Math.min(100, Math.round(checks.reduce((sum, c) => sum + c.weight, 0)));
+  const sum = Math.round(checks.reduce((total, c) => total + c.weight, 0));
+  const floor = Math.max(0, ...reputation.filter((r) => r.status === "flagged").map((r) => REPUTATION_FLOOR[r.source]));
+  const riskScore = Math.min(100, Math.max(sum, floor));
   const riskLevel = levelForScore(riskScore);
   return {
     riskScore,
