@@ -1,19 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import { DEFAULT_KEYWORDS, type ScanResult } from '@phishlens/core'
-import { useRealMongo } from './mongo.js'
 
-// test/setup.ts swaps the repositories for fakes; these tests want the real ones.
-vi.unmock('../src/repositories/users.repo.js')
-vi.unmock('../src/repositories/scans.repo.js')
-vi.unmock('../src/repositories/reports.repo.js')
-vi.unmock('../src/repositories/keywords.repo.js')
 
 const { usersRepo, DuplicateEmailError } = await import('../src/repositories/users.repo.js')
 const { scansRepo } = await import('../src/repositories/scans.repo.js')
-const { reportsRepo } = await import('../src/repositories/reports.repo.js')
 const { keywordsRepo, DuplicateKeywordError } = await import('../src/repositories/keywords.repo.js')
 
-useRealMongo()
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
@@ -29,7 +21,6 @@ function unsaved(riskLevel: ScanResult['riskLevel'], content = `https://example.
     reputation: [{ source: 'virustotal' as const, status: 'clean' as const, summary: 's' }],
   }
 }
-const report = { category: 'brand-impersonation' as const, title: 'Brand impersonation: example.com', details: 'details' }
 
 describe('usersRepo', () => {
   it('creates and finds accounts, normalizing email', async () => {
@@ -73,8 +64,8 @@ describe('usersRepo', () => {
     const older = await usersRepo.create({ email: 'old@example.com', name: 'Old' })
     await sleep(5)
     const newer = await usersRepo.create({ email: 'new@example.com', name: 'New' })
-    await scansRepo.record(older.id, unsaved('low'), null)
-    const scan = await scansRepo.record(older.id, unsaved('high'), report)
+    await scansRepo.record(older.id, unsaved('low'))
+    const scan = await scansRepo.record(older.id, unsaved('high'))
 
     const list = await usersRepo.listOverview()
     expect(list.map((u) => u.id)).toEqual([newer.id, older.id])
@@ -83,10 +74,10 @@ describe('usersRepo', () => {
   })
 })
 
-describe('scansRepo and reportsRepo', () => {
+describe('scansRepo', () => {
   it('stores a scan and maps it back to the shared shape', async () => {
     const u = await usersRepo.create({ email: 's@example.com', name: 'S' })
-    const saved = await scansRepo.record(u.id, unsaved('medium'), null)
+    const saved = await scansRepo.record(u.id, unsaved('medium'))
     expect(saved).toEqual({ ...unsaved('medium'), id: expect.stringMatching(/^[a-f\d]{24}$/), createdAt: expect.any(String), userId: u.id })
     expect(await scansRepo.listByUser(u.id)).toEqual([saved])
   })
@@ -94,10 +85,10 @@ describe('scansRepo and reportsRepo', () => {
   it('keeps each user’s history separate and newest first', async () => {
     const a = await usersRepo.create({ email: 'a@example.com', name: 'A' })
     const b = await usersRepo.create({ email: 'b@example.com', name: 'B' })
-    const first = await scansRepo.record(a.id, unsaved('low'), null)
+    const first = await scansRepo.record(a.id, unsaved('low'))
     await sleep(5)
-    const second = await scansRepo.record(a.id, unsaved('high'), report)
-    await scansRepo.record(b.id, unsaved('high'), report)
+    const second = await scansRepo.record(a.id, unsaved('high'))
+    await scansRepo.record(b.id, unsaved('high'))
 
     expect((await scansRepo.listByUser(a.id)).map((s) => s.id)).toEqual([second.id, first.id])
     expect((await scansRepo.listRecent(2)).length).toBe(2)
@@ -108,35 +99,46 @@ describe('scansRepo and reportsRepo', () => {
   it('finds scans by time for charts and "today" counts', async () => {
     const u = await usersRepo.create({ email: 't@example.com', name: 'T' })
     const before = new Date()
-    await scansRepo.record(u.id, unsaved('high'), report)
+    await scansRepo.record(u.id, unsaved('high'))
     expect(await scansRepo.levelsSince(before, u.id)).toEqual([{ riskLevel: 'high', createdAt: expect.any(String) }])
     expect(await scansRepo.countSince(before)).toBe(1)
     expect(await scansRepo.countSince(new Date(Date.now() + 60_000))).toBe(0)
   })
 
-  it('returns only flagged scans as reports, carrying their scan', async () => {
+  it('lists only medium and high scans as flagged (the threat reports), newest first', async () => {
     const u = await usersRepo.create({ email: 'r@example.com', name: 'R' })
-    await scansRepo.record(u.id, unsaved('low'), null)
-    const flagged = await scansRepo.record(u.id, unsaved('high'), report)
+    const other = await usersRepo.create({ email: 'o@example.com', name: 'O' })
+    await scansRepo.record(u.id, unsaved('low'))
+    const medium = await scansRepo.record(u.id, unsaved('medium'))
+    const high = await scansRepo.record(u.id, unsaved('high'))
+    await scansRepo.record(other.id, unsaved('high'))
 
-    const reports = await reportsRepo.listByUser(u.id)
-    expect(reports).toEqual([
-      {
-        id: `rpt_${flagged.id}`,
-        reportType: 'scan',
-        category: 'brand-impersonation',
-        riskLevel: 'high',
-        title: report.title,
-        details: report.details,
-        createdAt: flagged.createdAt,
-        scan: flagged,
-      },
-    ])
+    expect(await scansRepo.listFlaggedByUser(u.id)).toEqual([high, medium])
+  })
+
+  it('orders scans saved in the same millisecond by insertion', async () => {
+    const u = await usersRepo.create({ email: 'm@example.com', name: 'M' })
+    const ids = []
+    for (let i = 0; i < 5; i++) ids.push((await scansRepo.record(u.id, unsaved('low', `https://example.com/${i}`))).id)
+    expect((await scansRepo.listByUser(u.id)).map((s) => s.id)).toEqual(ids.reverse())
   })
 
   it('rejects documents that break the schema', async () => {
     const u = await usersRepo.create({ email: 'v@example.com', name: 'V' })
-    await expect(scansRepo.record(u.id, { ...unsaved('low'), riskScore: 140 }, null)).rejects.toThrow()
+    await expect(scansRepo.record(u.id, { ...unsaved('low'), riskScore: 140 })).rejects.toThrow()
+  })
+})
+
+describe('startup indexes', () => {
+  it('adds missing indexes but keeps ones created by hand in Atlas', async () => {
+    const mongoose = (await import('mongoose')).default
+    const { ensureIndexes } = await import('../src/lib/db.js')
+    const scans = mongoose.connection.collection('scans')
+    await scans.createIndex({ riskLevel: 1 }, { name: 'added_in_atlas' })
+    await ensureIndexes()
+    const names = (await scans.indexes()).map((i) => i.name)
+    expect(names).toContain('added_in_atlas')
+    expect(names).toEqual(expect.arrayContaining(['userId_1_createdAt_-1', 'createdAt_-1']))
   })
 })
 

@@ -2,7 +2,8 @@ import request from 'supertest'
 import { describe, expect, it } from 'vitest'
 
 const { default: app } = await import('../src/app.js')
-const { keywordsRepo, setUser } = await import('./fakes/db.js')
+const { keywordsRepo } = await import('../src/repositories/keywords.repo.js')
+const { setUser } = await import('./helpers.js')
 const { signedIn } = await import('./helpers.js')
 
 async function scan(cookie: string, url: string) {
@@ -21,13 +22,13 @@ describe('admin access', () => {
   it('re-checks the role on every request, so demotion takes effect at once', async () => {
     const admin = await signedIn('admin')
     expect((await request(app).get('/api/admin/users').set('Cookie', admin.cookie)).status).toBe(200)
-    setUser(admin.user.id, { role: 'user' })
+    await setUser(admin.user.id, { role: 'user' })
     expect((await request(app).get('/api/admin/users').set('Cookie', admin.cookie)).status).toBe(403)
   })
 
   it('locks out suspended admins', async () => {
     const admin = await signedIn('admin')
-    setUser(admin.user.id, { status: 'suspended' })
+    await setUser(admin.user.id, { status: 'suspended' })
     expect((await request(app).get('/api/admin/logs').set('Cookie', admin.cookie)).status).toBe(403)
   })
 })
@@ -36,7 +37,7 @@ describe('GET /api/admin/analytics', () => {
   it('summarizes users, scans and keywords across the platform', async () => {
     const admin = await signedIn('admin')
     const member = await signedIn('user')
-    setUser(member.user.id, { status: 'suspended' })
+    await setUser(member.user.id, { status: 'suspended' })
     await scan(admin.cookie, 'https://github.com')
     await scan(admin.cookie, 'http://secure-paypal-login-free.com')
     await keywordsRepo.add({ term: 'invoice', category: 'url', weight: 20 })

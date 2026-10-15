@@ -1,18 +1,11 @@
 import request from 'supertest'
 import { describe, expect, it, vi } from 'vitest'
-import { useRealMongo } from './mongo.js'
 
-// The whole app against a real MongoDB: undo test/setup.ts's fake repositories
-// (the reputation services stay stubbed — no network in tests).
-vi.unmock('../src/repositories/users.repo.js')
-vi.unmock('../src/repositories/scans.repo.js')
-vi.unmock('../src/repositories/reports.repo.js')
-vi.unmock('../src/repositories/keywords.repo.js')
+// The whole app end to end (reputation services stay stubbed: no network in tests).
 
 const { default: app } = await import('../src/app.js')
 const { UserModel } = await import('../src/models/user.model.js')
 
-useRealMongo()
 
 describe('end to end with MongoDB', () => {
   it('registers, scans, keeps history and reports, and serves the admin dashboard', async () => {

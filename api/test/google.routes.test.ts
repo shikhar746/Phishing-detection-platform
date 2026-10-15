@@ -9,7 +9,8 @@ vi.mock('../src/lib/google.js', () => ({
 
 const { default: app } = await import('../src/app.js')
 const google = await import('../src/lib/google.js')
-const { getUserRow: getRow, usersRepo } = await import('./fakes/db.js')
+const { userRow: getRow } = await import('./helpers.js')
+const { usersRepo } = await import('../src/repositories/users.repo.js')
 
 const credential = 'header.payload.signature-from-google-identity-services'
 const profile: GoogleProfile = {
@@ -52,7 +53,7 @@ describe('POST /api/auth/google', () => {
     expect(res.body.user).toMatchObject({ email: profile.email, name: profile.name, role: 'user' })
     expect(google.verifyGoogleIdToken).toHaveBeenCalledWith(credential)
 
-    const row = getRow(res.body.user.id)!
+    const row = (await getRow(res.body.user.id))!
     expect(row.googleId).toBe(profile.googleId)
     expect(row.passwordHash).toBeNull()
     expect(String(res.headers['set-cookie'])).toMatch(/accessToken=/)
@@ -81,15 +82,15 @@ describe('POST /api/auth/google', () => {
     const res = await request(app).post('/api/auth/google').send({ credential })
     expect(res.status).toBe(409)
     expect(res.body.error.code).toBe('GOOGLE_ACCOUNT_MISMATCH')
-    expect(getRow(existing.id)!.googleId).toBe('original-google-sub')
+    expect((await getRow(existing.id))!.googleId).toBe('original-google-sub')
     expect(String(res.headers['set-cookie'] ?? '')).not.toMatch(/accessToken=/)
   })
 
   it('refuses suspended accounts', async () => {
-    const { setUser } = await import('./fakes/db.js')
+    const { setUser } = await import('./helpers.js')
     vi.mocked(google.verifyGoogleIdToken).mockResolvedValue(profile)
     const first = await request(app).post('/api/auth/google').send({ credential })
-    setUser(first.body.user.id, { status: 'suspended' })
+    await setUser(first.body.user.id, { status: 'suspended' })
     const res = await request(app).post('/api/auth/google').send({ credential })
     expect(res.status).toBe(403)
     expect(res.body.error.code).toBe('ACCOUNT_SUSPENDED')
@@ -102,9 +103,9 @@ describe('POST /api/auth/google', () => {
     const res = await request(app).post('/api/auth/google').send({ credential })
     expect(res.status).toBe(200)
     expect(res.body.user.id).toBe(existing.id)
-    expect(getRow(existing.id)!.googleId).toBe(profile.googleId)
+    expect((await getRow(existing.id))!.googleId).toBe(profile.googleId)
     // the password still works afterwards
-    expect(getRow(existing.id)!.passwordHash).toBe('$2b$10$hash')
+    expect((await getRow(existing.id))!.passwordHash).toBe('$2b$10$hash')
   })
 
   it('lets the new Google session call /me', async () => {

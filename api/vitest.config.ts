@@ -3,6 +3,7 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
   test: {
     include: ['test/**/*.test.ts'],
+    globalSetup: ['test/globalSetup.ts'],
     setupFiles: ['test/setup.ts'],
     // the MongoDB tests may download a mongod binary on their first run
     hookTimeout: 180_000,
@@ -15,7 +16,7 @@ export default defineConfig({
       REFRESH_SECRET: 'test-refresh-secret',
       ACCESS_TOKEN_TTL: '15m',
       REFRESH_TOKEN_TTL: '7d',
-      MONGODB_URI: 'mongodb://127.0.0.1:1/unused-in-tests',
+      MONGODB_URI: 'mongodb://127.0.0.1:1/set-per-test-file-by-test-setup',
       GOOGLE_CLIENT_ID: 'test-client-id.apps.googleusercontent.com',
       CORS_ORIGIN: 'http://localhost:3000',
       RATE_LIMIT_MAX: '1000',

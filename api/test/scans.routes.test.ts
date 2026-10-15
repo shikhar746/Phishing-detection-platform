@@ -3,9 +3,11 @@ import { describe, expect, it, vi } from 'vitest'
 import type { ReputationResult } from '@phishlens/core'
 
 const { default: app } = await import('../src/app.js')
-const { allScans, keywordsRepo } = await import('./fakes/db.js')
+const { allScans } = await import('./helpers.js')
+const { keywordsRepo } = await import('../src/repositories/keywords.repo.js')
 const { checkReputation } = await import('../src/services/reputation/index.js')
 const { signedIn } = await import('./helpers.js')
+const { signAccessToken } = await import('../src/lib/tokens.js')
 const jwt = (await import('jsonwebtoken')).default
 
 const PHISHING = 'http://secure-paypal-login-free.com'
@@ -30,7 +32,7 @@ describe('POST /api/scans/url', () => {
       recommendation: 'Avoid Visiting',
     })
     expect(res.body.scan.id).toEqual(expect.any(String))
-    expect(allScans()).toHaveLength(0)
+    expect((await allScans())).toHaveLength(0)
   })
 
   it('normalizes scheme-less input and asks the reputation services about the normalized URL', async () => {
@@ -51,7 +53,7 @@ describe('POST /api/scans/url', () => {
     const { user, cookie } = await signedIn()
     const res = await request(app).post('/api/scans/url').set('Cookie', cookie).send({ url: SAFE })
     expect(res.status).toBe(201)
-    expect(allScans()).toEqual([expect.objectContaining({ id: res.body.scan.id, userId: user.id, riskLevel: 'low' })])
+    expect((await allScans())).toEqual([expect.objectContaining({ id: res.body.scan.id, userId: user.id, riskLevel: 'low' })])
   })
 
   it.each([
@@ -73,6 +75,27 @@ describe('POST /api/scans/url', () => {
     const res = await request(app).post('/api/scans/url').set('Cookie', `accessToken=${expired}`).send({ url: SAFE })
     expect(res.status).toBe(401)
     expect(res.body.error.code).toBe('INVALID_TOKEN')
+  })
+
+  it('rejects a token whose user id is not a MongoDB id with 401, not a 500', async () => {
+    const old = signAccessToken('550e8400-e29b-41d4-a716-446655440000')
+    const res = await request(app).post('/api/scans/url').set('Cookie', `accessToken=${old}`).send({ url: SAFE })
+    expect(res.status).toBe(401)
+    expect(res.body.error.code).toBe('INVALID_TOKEN')
+    expect((await request(app).get('/api/scans').set('Cookie', `accessToken=${old}`)).status).toBe(401)
+  })
+
+  it('stops suspended and deleted accounts from scanning at once, not when the token expires', async () => {
+    const { setUser } = await import('./helpers.js')
+    const me = await signedIn()
+    await setUser(me.user.id, { status: 'suspended' })
+    const suspended = await request(app).post('/api/scans/url').set('Cookie', me.cookie).send({ url: SAFE })
+    expect(suspended.status).toBe(403)
+    expect(suspended.body.error.code).toBe('ACCOUNT_SUSPENDED')
+
+    const ghost = `accessToken=${signAccessToken('0'.repeat(24))}`
+    expect((await request(app).post('/api/scans/url').set('Cookie', ghost).send({ url: SAFE })).status).toBe(401)
+    expect((await allScans())).toHaveLength(0)
   })
 
   it('uses the admin-managed keyword list', async () => {

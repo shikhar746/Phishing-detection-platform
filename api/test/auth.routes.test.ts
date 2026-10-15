@@ -2,7 +2,7 @@ import request from 'supertest'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { default: app } = await import('../src/app.js')
-const { getUserRow: getRow } = await import('./fakes/db.js')
+const { userRow: getRow } = await import('./helpers.js')
 const { signAccessToken, signRefreshToken } = await import('../src/lib/tokens.js')
 
 const valid = { name: 'Priya Nair', email: 'Priya@Example.com', password: 'hunter2hunter' }
@@ -53,7 +53,7 @@ describe('app wiring', () => {
   })
 
   it('hides unexpected failures behind a generic 500', async () => {
-    const { usersRepo } = await import('./fakes/db.js')
+    const { usersRepo } = await import('../src/repositories/users.repo.js')
     const spy = vi.spyOn(usersRepo, 'findByEmail').mockRejectedValueOnce(new Error('connection reset'))
     const log = vi.spyOn(console, 'error').mockImplementation(() => {})
     const res = await request(app).post('/api/auth/login').send({ email: 'a@example.com', password: 'x' })
@@ -84,7 +84,7 @@ describe('POST /api/auth/register', () => {
 
   it('stores a bcrypt hash, never the password', async () => {
     const res = await request(app).post('/api/auth/register').send(valid)
-    const row = getRow(res.body.user.id)!
+    const row = (await getRow(res.body.user.id))!
     expect(row.passwordHash).not.toBe(valid.password)
     expect(row.passwordHash).toMatch(/^\$2[aby]\$/)
   })
@@ -135,7 +135,7 @@ describe('POST /api/auth/login', () => {
   })
 
   it('rejects password login for a Google-only account', async () => {
-    const { usersRepo } = await import('./fakes/db.js')
+    const { usersRepo } = await import('../src/repositories/users.repo.js')
     await usersRepo.create({ email: 'g@example.com', name: 'G', googleId: 'google-sub-1' })
     const res = await request(app).post('/api/auth/login').send({ email: 'g@example.com', password: 'anything1' })
     expect(res.status).toBe(401)
@@ -151,8 +151,8 @@ describe('suspended accounts', () => {
   async function suspendedAgent() {
     const agent = request.agent(app)
     const res = await agent.post('/api/auth/register').send(valid)
-    const { setUser } = await import('./fakes/db.js')
-    setUser(res.body.user.id, { status: 'suspended' })
+    const { setUser } = await import('./helpers.js')
+    await setUser(res.body.user.id, { status: 'suspended' })
     return agent
   }
 
