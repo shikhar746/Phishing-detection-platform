@@ -21,9 +21,8 @@ services:
         generateValue: true
       - key: REFRESH_SECRET
         generateValue: true
-      - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_SERVICE_ROLE_KEY
+      # MongoDB Atlas connection string (allow Render in Atlas Network Access)
+      - key: MONGODB_URI
         sync: false
       - key: GOOGLE_CLIENT_ID
         sync: false
