@@ -13,7 +13,7 @@ export async function analyticsController(_req: Request, res: Response) {
     usersRepo.counts(),
     scansRepo.levelCounts(),
     scansRepo.countSince(windowStart(1)),
-    keywordsRepo.list(),
+    keywordsRepo.count(),
     scansRepo.levelsSince(windowStart()),
   ])
   const analytics: AdminAnalytics = {
@@ -22,7 +22,7 @@ export async function analyticsController(_req: Request, res: Response) {
     scansToday,
     threatsDetected: counts.high,
     detectionRate: counts.total ? Math.round((counts.high / counts.total) * 100) : 0,
-    activeKeywords: keywords.length,
+    activeKeywords: keywords,
   }
   res.status(200).json({ analytics, daily: computeDaily(recent) })
 }

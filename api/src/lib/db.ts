@@ -15,8 +15,16 @@ export async function connectDb(uri = env.MONGODB_URI, dbName = databaseName(uri
   // mongodb+srv:// needs an SRV lookup, which some local resolvers refuse
   if (env.DNS_SERVERS.length) dns.setServers(env.DNS_SERVERS)
   await mongoose.connect(uri, { dbName, serverSelectionTimeoutMS: 10_000 })
-  // unique indexes back real rules (one account per email, no duplicate keywords)
-  await Promise.all(Object.values(mongoose.models).map((model) => model.syncIndexes()))
+  await ensureIndexes()
+}
+
+/**
+ * Unique indexes back real rules (one account per email, no duplicate
+ * keywords), so make sure every model's indexes exist. createIndexes only
+ * adds what is missing; syncIndexes would also drop indexes added by hand in Atlas.
+ */
+export async function ensureIndexes(): Promise<void> {
+  await Promise.all(Object.values(mongoose.models).map((model) => model.createIndexes()))
 }
 
 export async function disconnectDb(): Promise<void> {
