@@ -1,0 +1,110 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens. Every color in the app comes from here — components only use
+ * the generated utilities (bg-surface, text-ink, bg-accent …), never hex values.
+ *
+ * Brand colors are used exactly as specified. The "-strong"/"-ink" shades are
+ * darker steps of the same hues, used where text sits on or is drawn in the
+ * brand color, so contrast meets WCAG AA (4.5:1) — e.g. white on #5E8B7E is
+ * only 3.84:1, white on accent-strong (#4A7468) is 5.26:1.
+ */
+@theme {
+  /* Brand */
+  --color-surface: #eff3f1; /* background / light surface */
+  --color-ink: #22333b; /* primary dark: text, navbar, dark sections */
+  --color-accent: #5e8b7e; /* accent: links, icons, "safe" state */
+  --color-highlight: #c7a17a; /* highlight: CTAs, badges, hover */
+
+  /* Derived steps (same hues) */
+  --color-surface-raised: #ffffff;
+  --color-surface-sunken: #e3e9e6;
+  --color-ink-soft: #2e4550;
+  --color-ink-muted: #5b6b72; /* 4.95:1 on surface */
+  --color-ink-faint: #8a979c; /* decorative only, never body text */
+  --color-line: #d6dfdb;
+  --color-line-strong: #bfcbc6;
+  --color-accent-strong: #4a7468; /* button bg with white text, 5.26:1 */
+  --color-accent-ink: #3f665b; /* accent-colored text on light, 5.75:1 */
+  --color-accent-soft: #dce8e3;
+  --color-highlight-strong: #b88f65;
+  --color-highlight-ink: #7e5f3c; /* highlight-colored text on light, 5.23:1 */
+  --color-highlight-soft: #f3eadf;
+  --color-on-dark-muted: #a9bdb5; /* secondary text on ink, 6.6:1 */
+  --color-on-dark-accent: #8fb8ab; /* accent text on ink, 6.0:1 */
+  --color-on-dark-danger: #edb3ab; /* error text on ink, 7.3:1 */
+
+  /* Risk scale — Safe = accent, Medium = highlight, High = one muted red */
+  --color-risk-low: #5e8b7e;
+  --color-risk-low-ink: #3f665b;
+  --color-risk-low-soft: #dce8e3;
+  --color-risk-medium: #c7a17a;
+  --color-risk-medium-ink: #7e5f3c;
+  --color-risk-medium-soft: #f3eadf;
+  --color-risk-high: #a4524b;
+  --color-risk-high-ink: #8e433d;
+  --color-risk-high-soft: #f4e3e0;
+
+  /* Type */
+  --font-display: var(--font-fraunces), ui-serif, Georgia, serif;
+  --font-sans: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, SFMono-Regular, monospace;
+
+  /* Shape & depth */
+  --radius-card: 1.25rem;
+  --shadow-soft: 0 1px 2px rgb(34 51 59 / 0.04), 0 8px 24px -12px rgb(34 51 59 / 0.12);
+  --shadow-lift: 0 2px 4px rgb(34 51 59 / 0.05), 0 18px 40px -16px rgb(34 51 59 / 0.22);
+
+  --animate-shimmer: shimmer 1.6s ease-in-out infinite;
+  @keyframes shimmer {
+    0% { background-position: -400px 0; }
+    100% { background-position: 400px 0; }
+  }
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    background-color: var(--color-surface);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection {
+    background-color: var(--color-highlight);
+    color: var(--color-ink);
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-accent-strong);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  /* A faint dot grid used behind dark hero/section surfaces. */
+  .bg-grid-dots {
+    background-image: radial-gradient(rgb(239 243 241 / 0.09) 1px, transparent 1px);
+    background-size: 22px 22px;
+  }
+  .bg-grid-dots-light {
+    background-image: radial-gradient(rgb(34 51 59 / 0.07) 1px, transparent 1px);
+    background-size: 22px 22px;
+  }
+  .skeleton {
+    background-color: var(--color-surface-sunken);
+    background-image: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.6), transparent);
+    background-size: 400px 100%;
+    background-repeat: no-repeat;
+    animation: var(--animate-shimmer);
+  }
+}
