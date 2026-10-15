@@ -1,40 +1,32 @@
 # API — AI Phishing Detection Platform
 
-Express 5 + TypeScript API. Auth uses httpOnly JWT cookies (access + rotating refresh token),
-email/password or Google sign-in, with users stored in Supabase Postgres.
+Express 5 + TypeScript REST API. Auth uses httpOnly JWT cookies (short-lived
+access token + rotating refresh token), email/password or Google sign-in.
+Data lives in Supabase Postgres. Scoring comes from `@phishlens/core`
+(shared with the web app), with VirusTotal and Google Safe Browsing as
+reputation inputs.
 
-## Setup
+Setup and deployment are in the [root README](../README.md). From the repo
+root: `npm run dev:api`, `npm test -w api`, `npm run seed`.
 
-```bash
-cd api
-npm install
-cp .env.example .env     # then replace the dummy values
-npm run dev              # http://localhost:8080
+## Layout
+
 ```
-
-1. Create a Supabase project and run [`infra/schema.sql`](infra/schema.sql) in its SQL editor.
-2. Put the project URL and **service-role** key in `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY`.
-3. Generate `JWT_SECRET` and `REFRESH_SECRET` (two different long random strings).
-4. To make yourself an admin after registering:
-   `update public.users set role = 'admin' where email = 'you@example.com';`
-
-Scripts: `npm run dev`, `npm run build`, `npm start`, `npm run typecheck`, `npm test`.
-
-## Google sign-in
-
-The web app uses Google Identity Services: Google's button gives the browser an **ID token**,
-the browser posts it to `POST /api/auth/google`, and the API verifies it with
-`google-auth-library` against `GOOGLE_CLIENT_ID` before starting a session.
-
-1. Google Cloud Console → APIs & Services → Credentials → **Create OAuth client ID** → *Web application*.
-2. Authorized JavaScript origins: `http://localhost:3000` (plus your production web origin).
-   No redirect URI is needed for this popup flow.
-3. Put the client ID in `GOOGLE_CLIENT_ID` here **and** `NEXT_PUBLIC_GOOGLE_CLIENT_ID` in `web/.env.local`.
-
-Account matching: a returning user is matched on Google's stable `sub`; a Google-verified email
-that already has a password account is linked to it; otherwise a new account is created.
-Unverified Google emails are refused. Leave `GOOGLE_CLIENT_ID` empty to turn Google sign-in off
-(the endpoint then answers 501). `GOOGLE_CLIENT_SECRET` isn't needed for this flow.
+src/
+  app.ts, server.ts        Express app (middleware, routes) and the listener
+  config/env.ts            typed, validated environment
+  routes/                  auth, scans, reports, admin
+  controllers/             request → response, throwing HttpError on failure
+  services/scanner.ts      scan pipeline: rules + reputation → save
+  services/keywords.ts     cached admin keyword list
+  services/reputation/     VirusTotal v3 + Safe Browsing v4 clients
+  repositories/            all Supabase access (users, scans, reports, keywords)
+  middlewares/             auth (requireAuth / optionalAuth / requireAdmin),
+                           rate limits, the single error handler
+  schemas/                 zod request schemas (scan input reuses core's validators)
+  scripts/seed.ts          keyword seeding, admin promotion
+infra/schema.sql           tables, record_scan() and the admin_user_overview view
+```
 
 ## Endpoints
 
@@ -46,25 +38,74 @@ Unverified Google emails are refused. Leave `GOOGLE_CLIENT_ID` empty to turn Goo
 | POST | `/api/auth/google` | — | `{ credential }` (Google ID token) → `{ user }` + cookies |
 | POST | `/api/auth/refresh` | refresh cookie | rotates both tokens |
 | POST | `/api/auth/logout` | — | clears cookies |
-| GET | `/api/auth/me` | access cookie | current `{ user }` |
-| GET | `/api/users/lookup?email=` | access cookie | exact-address lookup |
+| GET | `/api/auth/me` | signed in | current `{ user }` |
+| POST | `/api/scans/url` | optional | `{ url }` → 201 `{ scan }`; saved only when signed in |
+| POST | `/api/scans/email` | optional | `{ content }` → 201 `{ scan }`; saved only when signed in |
+| GET | `/api/scans` | signed in | `{ scans }`, newest first |
+| GET | `/api/scans/stats` | signed in | `{ stats, daily }` (14-day chart) |
+| GET | `/api/reports` | signed in | `{ reports }`: summary + one per distinct flagged content |
+| GET | `/api/admin/analytics` | admin | `{ analytics, daily }` platform-wide |
+| GET | `/api/admin/users` | admin | `{ users }` with scan counts and last activity |
+| PATCH | `/api/admin/users/:id` | admin | `{ role?, status? }`; not on yourself |
+| GET | `/api/admin/logs` | admin | `{ scans }` across all users |
+| GET/POST | `/api/admin/keywords` | admin | list / add `{ term, category, weight }` |
+| DELETE | `/api/admin/keywords/:id` | admin | 204 |
 
-Errors always use `{ "error": { "code", "message", "issues?" } }`. Register, login and Google
-are rate-limited on failed attempts (`RATE_LIMIT_MAX` per `RATE_LIMIT_WINDOW_MINUTES`).
+Every error uses one envelope, written only by the error handler:
+`{ "error": { "code", "message", "issues"? } }`.
+
+## How a scan works
+
+1. The input is validated with the same functions the web form uses.
+2. For URLs, the keyword list (cached for a minute) and both reputation
+   lookups run **in parallel**. Each lookup has a 6 s timeout; a failure or a
+   missing key becomes an "unavailable" result instead of failing the scan.
+3. `@phishlens/core` scores rules + reputation into a verdict.
+4. For signed-in users, `record_scan()` saves the scan and (when medium/high)
+   its report row in **one transaction**.
+
+VirusTotal URLs it has never seen are submitted for analysis and reported as
+"not yet known" — that is not treated as clean. The free VirusTotal tier
+allows 4 lookups a minute; `SCAN_RATE_LIMIT_MAX` limits scans per user.
+
+## Security model
+
+- **Sessions:** httpOnly cookies; the refresh cookie is scoped to
+  `/api/auth/refresh`. The browser calls the API through the web app's
+  `/api/*` proxy, so cookies are first-party (`COOKIE_SAMESITE=lax`).
+- **Admin checks** re-read role and status from the database on every admin
+  request, so demoting or suspending an admin takes effect immediately.
+  Suspended users can't sign in or refresh; an access token they already hold
+  keeps working until it expires (`ACCESS_TOKEN_TTL`, 15 minutes by default).
+- **Google sign-in** matches returning users on Google's stable `sub`, links a
+  verified email to an existing password account only when that account has
+  no other Google identity, and refuses unverified emails.
+- **Rate limits:** failed sign-ins per IP; scans per user (or per IP when
+  anonymous). `TRUST_PROXY` must equal the real number of proxies in front of
+  the API, or clients could forge the IP the limiter sees.
+- **Database:** row-level security is on for every table with no public
+  policies; only the server's service-role key can read or write.
+
+## Google sign-in setup
+
+1. Google Cloud Console → APIs & Services → Credentials → **Create OAuth
+   client ID** → *Web application*.
+2. Authorized JavaScript origins: `http://localhost:3000` and your production
+   web origin. No redirect URI is needed (popup flow).
+3. Put the client ID in `GOOGLE_CLIENT_ID` here **and**
+   `NEXT_PUBLIC_GOOGLE_CLIENT_ID` in `web/.env.local`. Leave it empty to turn
+   Google sign-in off (the endpoint then answers 501).
 
 ## Tests
 
-```bash
-npm test
-```
+Vitest + Supertest drive the real Express app. `test/setup.ts` swaps every
+repository for one in-memory database (`test/fakes/db.ts`) and stubs the
+reputation services, so tests need no network, Supabase or `.env`.
 
-Vitest + Supertest drive the real Express app. The database layer
-(`src/repositories/users.repo.ts`) is swapped for an in-memory fake (`test/fakes/usersRepo.ts`) and
-Google verification is mocked, so tests need no network, Supabase project or `.env` — test-only
-values come from `vitest.config.ts`.
-
-- `test/auth.routes.test.ts` — app wiring (CORS, headers, 404), register, login, me, refresh, logout
-- `test/google.routes.test.ts` — Google sign-in: disabled, invalid token, new user, returning user, account linking
-- `test/google.lib.test.ts` — ID-token verification rules (audience, verified email, fallbacks)
-- `test/users.routes.test.ts` — user lookup
-- `test/units.test.ts` — validation schemas and JWT helpers
+- `auth.routes.test.ts` — app wiring, register/login/me/refresh/logout, suspension, error handling
+- `google.routes.test.ts`, `google.lib.test.ts` — Google sign-in and ID-token verification
+- `scans.routes.test.ts` — scanning, persistence, history, stats, reports
+- `admin.routes.test.ts` — admin access, analytics, users, logs, keywords
+- `reputation.test.ts` — VirusTotal and Safe Browsing clients, timeouts
+- `rateLimit.test.ts` — per-user scan limits, X-Forwarded-For handling
+- `units.test.ts` — schemas and JWT helpers

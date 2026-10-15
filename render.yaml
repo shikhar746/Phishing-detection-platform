@@ -1,0 +1,36 @@
+# Render Blueprint for the API (https://render.com/docs/blueprint-spec).
+# The web app deploys separately (Vercel, root directory "web"); see README.md.
+services:
+  - type: web
+    name: phishlens-api
+    runtime: node
+    plan: free
+    # build from the repo root so npm installs the workspace (api + packages/core)
+    buildCommand: npm ci --include=dev && npm run build -w api
+    startCommand: npm start -w api
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Render's load balancer + the Vercel /api proxy in front of it
+      - key: TRUST_PROXY
+        value: "2"
+      - key: COOKIE_SAMESITE
+        value: lax
+      - key: JWT_SECRET
+        generateValue: true
+      - key: REFRESH_SECRET
+        generateValue: true
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: VIRUSTOTAL_API_KEY
+        sync: false
+      - key: GOOGLE_SAFE_BROWSING_API_KEY
+        sync: false
+      # only needed if browsers call the API directly instead of via the web proxy
+      - key: CORS_ORIGIN
+        sync: false
