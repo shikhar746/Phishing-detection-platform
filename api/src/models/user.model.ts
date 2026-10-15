@@ -1,4 +1,5 @@
 import { model, Schema, type InferSchemaType, type Types } from 'mongoose'
+import { ROLES, USER_STATUSES } from '@phishlens/core'
 
 const userSchema = new Schema(
   {
@@ -9,8 +10,12 @@ const userSchema = new Schema(
     // Google's stable "sub" claim; unique when present
     googleId: { type: String, default: null },
     imageUrl: { type: String, default: null },
-    role: { type: String, enum: ['user', 'admin'], default: 'user', required: true },
-    status: { type: String, enum: ['active', 'suspended'], default: 'active', required: true },
+    role: { type: String, enum: ROLES, default: 'user', required: true },
+    status: { type: String, enum: USER_STATUSES, default: 'active', required: true },
+    // Activity counters for the admin user list, kept up to date when a scan
+    // is saved, so listing users never has to scan the scans collection.
+    scanCount: { type: Number, default: 0, min: 0 },
+    lastActiveAt: { type: Date, default: null },
   },
   { timestamps: { createdAt: true, updatedAt: false }, collection: 'users' },
 )

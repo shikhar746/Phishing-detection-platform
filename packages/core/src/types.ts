@@ -1,7 +1,12 @@
-// Shared domain types: the API contract and the shape of database rows
-// (users, scan_history, reports, keywords).
+// Shared domain types: the API contract and the shape of stored documents.
+// Every closed set of values is a const list with its type derived from it,
+// so database schemas can use the same lists instead of re-typing them.
 
-export type Role = "user" | "admin";
+export const ROLES = ["user", "admin"] as const;
+export type Role = (typeof ROLES)[number];
+
+export const USER_STATUSES = ["active", "suspended"] as const;
+export type UserStatus = (typeof USER_STATUSES)[number];
 
 export interface User {
   id: string;
@@ -10,10 +15,17 @@ export interface User {
   role: Role;
 }
 
-export type ScanType = "url" | "email";
-export type RiskLevel = "low" | "medium" | "high";
+export const SCAN_TYPES = ["url", "email"] as const;
+export type ScanType = (typeof SCAN_TYPES)[number];
 
-export type CheckSeverity = "pass" | "info" | "warn" | "fail";
+export const RISK_LEVELS = ["low", "medium", "high"] as const;
+export type RiskLevel = (typeof RISK_LEVELS)[number];
+
+export const CHECK_SEVERITIES = ["pass", "info", "warn", "fail"] as const;
+export type CheckSeverity = (typeof CHECK_SEVERITIES)[number];
+
+export const REPUTATION_SOURCES = ["virustotal", "safe-browsing"] as const;
+export const REPUTATION_STATUSES = ["clean", "flagged", "unavailable"] as const;
 
 /** One rule or API check that contributed to the score. */
 export interface CheckResult {
@@ -26,8 +38,8 @@ export interface CheckResult {
 }
 
 export interface ReputationResult {
-  source: "virustotal" | "safe-browsing";
-  status: "clean" | "flagged" | "unavailable";
+  source: (typeof REPUTATION_SOURCES)[number];
+  status: (typeof REPUTATION_STATUSES)[number];
   /** e.g. "3 / 92 engines" or "SOCIAL_ENGINEERING". */
   summary: string;
 }
@@ -95,7 +107,7 @@ export interface SummaryReport extends ReportBase {
 export type ThreatReport = ScanReport | SummaryReport;
 
 export interface AdminUser extends User {
-  status: "active" | "suspended";
+  status: UserStatus;
   scans: number;
   lastActive: string;
   createdAt: string;

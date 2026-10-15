@@ -1,11 +1,12 @@
 import { model, Schema, type InferSchemaType, type Types } from 'mongoose'
+import { CHECK_SEVERITIES, REPUTATION_SOURCES, REPUTATION_STATUSES, RISK_LEVELS, SCAN_TYPES } from '@phishlens/core'
 
 const checkSchema = new Schema(
   {
     id: { type: String, required: true },
     label: { type: String, required: true },
     detail: { type: String, required: true },
-    severity: { type: String, enum: ['pass', 'info', 'warn', 'fail'], required: true },
+    severity: { type: String, enum: CHECK_SEVERITIES, required: true },
     weight: { type: Number, required: true },
   },
   { _id: false },
@@ -13,40 +14,26 @@ const checkSchema = new Schema(
 
 const reputationSchema = new Schema(
   {
-    source: { type: String, enum: ['virustotal', 'safe-browsing'], required: true },
-    status: { type: String, enum: ['clean', 'flagged', 'unavailable'], required: true },
+    source: { type: String, enum: REPUTATION_SOURCES, required: true },
+    status: { type: String, enum: REPUTATION_STATUSES, required: true },
     summary: { type: String, required: true },
   },
   { _id: false },
 )
 
-// A flagged scan's threat report. Embedded in its scan, so the two are always
-// written together in one atomic insert and can never drift apart.
-const reportSchema = new Schema(
-  {
-    category: {
-      type: String,
-      enum: ['credential-harvesting', 'brand-impersonation', 'urgency-scam', 'malicious-reputation', 'insecure-transport'],
-      required: true,
-    },
-    title: { type: String, required: true },
-    details: { type: String, required: true },
-  },
-  { _id: false },
-)
-
+// A medium or high scan is also a threat report; the report's wording is
+// derived from the scan (scanReport in @phishlens/core), so nothing extra is stored.
 const scanSchema = new Schema(
   {
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    type: { type: String, enum: ['url', 'email'], required: true },
+    type: { type: String, enum: SCAN_TYPES, required: true },
     content: { type: String, required: true },
-    riskLevel: { type: String, enum: ['low', 'medium', 'high'], required: true },
+    riskLevel: { type: String, enum: RISK_LEVELS, required: true },
     riskScore: { type: Number, min: 0, max: 100, required: true },
     threatStatus: { type: String, required: true },
     recommendation: { type: String, required: true },
     checks: { type: [checkSchema], default: [] },
     reputation: { type: [reputationSchema], default: [] },
-    report: { type: reportSchema, default: null },
   },
   { timestamps: { createdAt: true, updatedAt: false }, collection: 'scans' },
 )
