@@ -74,7 +74,7 @@ describe('POST /api/auth/register', () => {
     const res = await request(app).post('/api/auth/register').send(valid)
     expect(res.status).toBe(201)
     expect(res.body.user).toMatchObject({ email: 'priya@example.com', name: 'Priya Nair', role: 'user' })
-    expect(res.body.user).not.toHaveProperty('password_hash')
+    expect(res.body.user).not.toHaveProperty('passwordHash')
 
     const access = cookieNamed(res, 'accessToken')
     const refresh = cookieNamed(res, 'refreshToken')
@@ -85,8 +85,8 @@ describe('POST /api/auth/register', () => {
   it('stores a bcrypt hash, never the password', async () => {
     const res = await request(app).post('/api/auth/register').send(valid)
     const row = getRow(res.body.user.id)!
-    expect(row.password_hash).not.toBe(valid.password)
-    expect(row.password_hash).toMatch(/^\$2[aby]\$/)
+    expect(row.passwordHash).not.toBe(valid.password)
+    expect(row.passwordHash).toMatch(/^\$2[aby]\$/)
   })
 
   it.each([

@@ -50,3 +50,15 @@ describe('tokens', () => {
     expect(decoded.exp - decoded.iat).toBe(15 * 60)
   })
 })
+
+describe('databaseName', () => {
+  it('prefers MONGODB_DB, then the name in the URI, then "phishlens"', async () => {
+    const { databaseName } = await import('../src/lib/db.js')
+    expect(databaseName('mongodb://127.0.0.1:27017/ai-phishing', 'override')).toBe('override')
+    expect(databaseName('mongodb://127.0.0.1:27017/ai-phishing')).toBe('ai-phishing')
+    expect(databaseName('mongodb+srv://u:p@cluster0.abc.mongodb.net/prod?retryWrites=true')).toBe('prod')
+    expect(databaseName('mongodb://h1:27017,h2:27017/multi?replicaSet=rs0')).toBe('multi')
+    expect(databaseName('mongodb+srv://u:p@cluster0.abc.mongodb.net/?retryWrites=true')).toBe('phishlens')
+    expect(databaseName('mongodb://127.0.0.1:27017')).toBe('phishlens')
+  })
+})

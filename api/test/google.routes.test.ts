@@ -53,8 +53,8 @@ describe('POST /api/auth/google', () => {
     expect(google.verifyGoogleIdToken).toHaveBeenCalledWith(credential)
 
     const row = getRow(res.body.user.id)!
-    expect(row.google_id).toBe(profile.googleId)
-    expect(row.password_hash).toBeNull()
+    expect(row.googleId).toBe(profile.googleId)
+    expect(row.passwordHash).toBeNull()
     expect(String(res.headers['set-cookie'])).toMatch(/accessToken=/)
   })
 
@@ -81,7 +81,7 @@ describe('POST /api/auth/google', () => {
     const res = await request(app).post('/api/auth/google').send({ credential })
     expect(res.status).toBe(409)
     expect(res.body.error.code).toBe('GOOGLE_ACCOUNT_MISMATCH')
-    expect(getRow(existing.id)!.google_id).toBe('original-google-sub')
+    expect(getRow(existing.id)!.googleId).toBe('original-google-sub')
     expect(String(res.headers['set-cookie'] ?? '')).not.toMatch(/accessToken=/)
   })
 
@@ -102,9 +102,9 @@ describe('POST /api/auth/google', () => {
     const res = await request(app).post('/api/auth/google').send({ credential })
     expect(res.status).toBe(200)
     expect(res.body.user.id).toBe(existing.id)
-    expect(getRow(existing.id)!.google_id).toBe(profile.googleId)
+    expect(getRow(existing.id)!.googleId).toBe(profile.googleId)
     // the password still works afterwards
-    expect(getRow(existing.id)!.password_hash).toBe('$2b$10$hash')
+    expect(getRow(existing.id)!.passwordHash).toBe('$2b$10$hash')
   })
 
   it('lets the new Google session call /me', async () => {

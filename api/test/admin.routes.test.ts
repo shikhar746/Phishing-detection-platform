@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto'
 import request from 'supertest'
 import { describe, expect, it } from 'vitest'
 
@@ -98,7 +97,7 @@ describe('user management', () => {
 
   it('answers unknown and malformed ids', async () => {
     const admin = await signedIn('admin')
-    const missing = await request(app).patch(`/api/admin/users/${randomUUID()}`).set('Cookie', admin.cookie).send({ role: 'user' })
+    const missing = await request(app).patch(`/api/admin/users/${'0'.repeat(24)}`).set('Cookie', admin.cookie).send({ role: 'user' })
     expect(missing.status).toBe(404)
     const malformed = await request(app).patch('/api/admin/users/not-a-uuid').set('Cookie', admin.cookie).send({ role: 'user' })
     expect(malformed.status).toBe(400)

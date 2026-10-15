@@ -2,7 +2,7 @@
 // vi.mock(...) in place of each repository, so controllers, services and
 // middleware run unchanged without Supabase.
 
-import { randomUUID } from 'node:crypto'
+import { randomBytes } from 'node:crypto'
 import type { AdminUser, KeywordRule, RiskLevel, ScanReport, ScanResult, SuspiciousKeyword } from '@phishlens/core'
 import type { NewUser, PublicUser, UserPatch, UserWithSecret } from '../../src/repositories/users.repo.js'
 import type { LevelCounts, ReportFields, UnsavedScan } from '../../src/repositories/scans.repo.js'
@@ -61,22 +61,22 @@ export const usersRepo = {
   },
   async findByEmail(email: string) {
     const row = [...users.values()].find((r) => r.email === email)
-    return row ? { ...toPublic(row), password_hash: row.password_hash, google_id: row.google_id } : null
+    return row ? { ...toPublic(row), passwordHash: row.passwordHash, googleId: row.googleId } : null
   },
   async findByGoogleId(googleId: string) {
-    const row = [...users.values()].find((r) => r.google_id === googleId)
+    const row = [...users.values()].find((r) => r.googleId === googleId)
     return row ? toPublic(row) : null
   },
   async create(input: NewUser) {
     if ([...users.values()].some((r) => r.email === input.email)) throw new DuplicateEmailError()
     const row: UserRow = {
-      id: randomUUID(),
+      id: randomBytes(12).toString('hex'),
       email: input.email,
       name: input.name,
       role: 'user',
       status: 'active',
-      password_hash: input.passwordHash ?? null,
-      google_id: input.googleId ?? null,
+      passwordHash: input.passwordHash ?? null,
+      googleId: input.googleId ?? null,
       image_url: input.imageUrl ?? null,
       created_at: tick(),
     }
@@ -86,7 +86,7 @@ export const usersRepo = {
   async linkGoogle(id: string, googleId: string, imageUrl: string | null) {
     const row = users.get(id)
     if (!row) throw new Error(`no user ${id}`)
-    row.google_id = googleId
+    row.googleId = googleId
     row.image_url = imageUrl
     return toPublic(row)
   },
@@ -108,9 +108,9 @@ export const usersRepo = {
 
 export const scansRepo = {
   async record(userId: string, scan: UnsavedScan, report: ReportFields | null) {
-    const saved: ScanResult = { ...scan, id: randomUUID(), createdAt: tick(), userId }
+    const saved: ScanResult = { ...scan, id: randomBytes(12).toString('hex'), createdAt: tick(), userId }
     scans.unshift(saved)
-    if (report) reports.unshift({ ...report, id: randomUUID(), userId, scanId: saved.id, riskLevel: saved.riskLevel, createdAt: saved.createdAt })
+    if (report) reports.unshift({ ...report, id: randomBytes(12).toString('hex'), userId, scanId: saved.id, riskLevel: saved.riskLevel, createdAt: saved.createdAt })
     return saved
   },
   async listByUser(userId: string) {
@@ -157,7 +157,7 @@ export const keywordsRepo = {
   },
   async add(rule: KeywordRule) {
     if (keywords.some((k) => k.term === rule.term && k.category === rule.category)) throw new DuplicateKeywordError()
-    const keyword: SuspiciousKeyword = { ...rule, id: randomUUID(), createdAt: tick() }
+    const keyword: SuspiciousKeyword = { ...rule, id: randomBytes(12).toString('hex'), createdAt: tick() }
     keywords.unshift(keyword)
     return keyword
   },
@@ -191,7 +191,7 @@ export function getUserRow(id: string) {
   return users.get(id)
 }
 
-export function setUser(id: string, patch: Partial<Pick<UserRow, 'role' | 'status' | 'google_id'>>) {
+export function setUser(id: string, patch: Partial<Pick<UserRow, 'role' | 'status' | 'googleId'>>) {
   const row = users.get(id)
   if (row) Object.assign(row, patch)
 }
